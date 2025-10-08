@@ -49,6 +49,14 @@ if workspace_response.status_code == 201:
 }
 
     print("Assign payload:", assign_payload)
+    # ✅ Graph API lookup to verify object ID
+    graph_url = f"https://graph.microsoft.com/v1.0/users/{admin_object_id}"
+    graph_headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+    graph_response = requests.get(graph_url, headers=graph_headers)
+    print("Graph lookup result:", graph_response.json())
+
     assign_response = requests.post(assign_url, headers=headers, json=assign_payload)
 
     if assign_response.status_code == 200:
