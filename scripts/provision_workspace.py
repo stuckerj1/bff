@@ -48,7 +48,7 @@ if workspace_response.status_code == 201:
     "role": "Admin"
 }
 
-print("Assign payload:", assign_payload)
+    print("Assign payload:", assign_payload)
     assign_response = requests.post(assign_url, headers=headers, json=assign_payload)
 
     if assign_response.status_code == 200:
