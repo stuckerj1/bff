@@ -39,7 +39,7 @@ if workspace_response.status_code == 201:
 
     # Step 4: Assign initial admin role
     admin_email = os.environ.get("ADMIN_EMAIL")
-    assign_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/users"
+    assign_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/roleAssignments"
     assign_payload = {
         "userEmail": admin_email,
         "role": "Admin"
