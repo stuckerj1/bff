@@ -1,4 +1,4 @@
-# Fabric Benchmarking Framework
+# Benchmark Fabric Framework
 
 This repository contains a modular, repeatable benchmarking framework for Microsoft Fabric. It supports synthetic data generation, ingestion strategies, update logic, query benchmarking, and scorecard reporting.
 
