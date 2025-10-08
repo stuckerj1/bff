@@ -1,0 +1,23 @@
+fabric_workspace:
+  name: "FabricBenchmarking"
+  capacity: "Premium"
+  artifacts:
+    lakehouse:
+      name: "BenchmarkLakehouse"
+      folders: ["base", "updates", "cdc"]
+    notebooks:
+      - generate_data.ipynb
+      - ingest_data.ipynb
+      - apply_updates.ipynb
+      - run_queries.ipynb
+      - generate_scorecard.ipynb
+      - capture_metrics.ipynb
+    semantic_model:
+      source: "Delta tables"
+      export: "BenchmarkModel.pbix"
+    reports:
+      - Scorecard.pbix
+      - QueryPerformance.pbix
+    shortcuts:
+      - path: "/external/lakehouse"
+        target: "CustomerLakehouse"
