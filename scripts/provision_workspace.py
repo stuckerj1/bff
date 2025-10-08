@@ -5,7 +5,7 @@ import requests
 tenant_id = os.environ.get("TENANT_ID")
 client_id = os.environ.get("CLIENT_ID")
 client_secret = os.environ.get("CLIENT_SECRET")
-scope = "https://graph.microsoft.com/.default"
+scope = "https://api.fabric.microsoft.com/.default"
 
 token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
 token_data = {
@@ -19,7 +19,7 @@ token_response.raise_for_status()
 access_token = token_response.json()["access_token"]
 
 # Step 2: Create Fabric Workspace
-workspace_url = "https://graph.microsoft.com/v1.0/fabric/workspaces"
+workspace_url = "https://api.fabric.microsoft.com/v1/workspaces"
 headers = {
     "Authorization": f"Bearer {access_token}",
     "Content-Type": "application/json"
