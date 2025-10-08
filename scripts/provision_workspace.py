@@ -63,7 +63,7 @@ if workspace_response.status_code == 201:
 
     for attempt in range(max_retries):
         assign_response = requests.post(assign_url, headers=headers, json=assign_payload)
-        if assign_response.status_code == 200:
+        if assign_response.status_code == 201:
             print(f"Assigned {admin_object_id} as Admin.")
             break
         else:
