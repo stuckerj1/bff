@@ -41,12 +41,14 @@ if workspace_response.status_code == 201:
     admin_object_id = os.environ.get("ADMIN_OBJECT_ID")
     assign_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/roleAssignments"
     assign_payload = {
-        "principal": {
+    "principal": {
         "id": admin_object_id,
         "type": "User"
     },
-        "role": "Admin"
-    }
+    "role": "Admin"
+}
+
+print("Assign payload:", assign_payload)
     assign_response = requests.post(assign_url, headers=headers, json=assign_payload)
 
     if assign_response.status_code == 200:
