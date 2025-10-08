@@ -67,17 +67,17 @@ if workspace_response.status_code == 201:
             break
         else:
             print(f"Attempt {attempt + 1} failed: {assign_response.text}")
-            time.sleep(retry_delay)
-    else:
-        error_details = assign_response.json().get("error", {})
-        error_code = error_details.get("code", "Unknown")
-        error_message = error_details.get("message", "No message provided")
-        inner_error = error_details.get("innerError", {})
-        request_id = inner_error.get("request-id", "N/A")
-        client_request_id = inner_error.get("client-request-id", "N/A")
+            error_details = assign_response.json().get("error", {})
+            error_code = error_details.get("code", "Unknown")
+            error_message = error_details.get("message", "No message provided")
+            inner_error = error_details.get("innerError", {})
+            request_id = inner_error.get("request-id", "N/A")
+            client_request_id = inner_error.get("client-request-id", "N/A")
 
-        print("All attempts to assign admin failed.")
-        print(f"Error Code: {error_code}")
-        print(f"Message: {error_message}")
-        print(f"Request ID: {request_id}")
-        print(f"Client Request ID: {client_request_id}")
+            print(f"Error Code: {error_code}")
+            print(f"Message: {error_message}")
+            print(f"Request ID: {request_id}")
+            print(f"Client Request ID: {client_request_id}")
+            time.sleep(retry_delay)
+else:
+    print("Error creating workspace:", workspace_response.text)
