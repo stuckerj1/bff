@@ -33,7 +33,22 @@ workspace_response = requests.post(workspace_url, headers=headers, json=workspac
 
 # Step 3: Output Result
 if workspace_response.status_code == 201:
+    workspace_id = workspace_response.json()["id"]
     print("Workspace created successfully.")
-    print("Workspace ID:", workspace_response.json()["id"])
+    print("Workspace ID:", workspace_id)
+
+    # Step 4: Assign initial admin role
+    admin_email = os.environ.get("ADMIN_EMAIL")
+    assign_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/users"
+    assign_payload = {
+        "userEmail": admin_email,
+        "role": "Admin"
+    }
+    assign_response = requests.post(assign_url, headers=headers, json=assign_payload)
+
+    if assign_response.status_code == 200:
+        print(f"Assigned {admin_email} as Admin.")
+    else:
+        print("Error assigning admin:", assign_response.text)
 else:
     print("Error creating workspace:", workspace_response.text)
