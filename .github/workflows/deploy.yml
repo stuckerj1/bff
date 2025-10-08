@@ -24,5 +24,6 @@ jobs:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           CAPACITY_ID: ${{ secrets.CAPACITY_ID }}
+          ADMIN_OBJECT_ID: ${{ secrets.ADMIN_OBJECT_ID }}
         run: |
           python scripts/provision_workspace.py
