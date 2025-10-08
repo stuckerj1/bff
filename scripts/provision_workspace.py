@@ -1,6 +1,13 @@
 import os
 import requests
 
+# Load environment variables
+tenant_id = os.environ.get("TENANT_ID")
+client_id = os.environ.get("CLIENT_ID")
+client_secret = os.environ.get("CLIENT_SECRET")
+capacity_id = os.environ.get("CAPACITY_ID")
+admin_object_id = os.environ.get("ADMIN_OBJECT_ID")
+
 # Step 1: OAuth2 Token Request
 fabric_scope = "https://api.fabric.microsoft.com/.default"
 graph_scope = "https://graph.microsoft.com/.default"
@@ -32,7 +39,7 @@ graph_access_token = graph_token_response.json()["access_token"]
 # Step 2: Create Fabric Workspace
 workspace_url = "https://api.fabric.microsoft.com/v1/workspaces"
 headers = {
-    "Authorization": f"Bearer {access_token}",
+    "Authorization": f"Bearer {fabric_access_token}",
     "Content-Type": "application/json"
 }
 workspace_payload = {
@@ -63,7 +70,7 @@ if workspace_response.status_code == 201:
     # ✅ Graph API lookup to verify object ID
     graph_url = f"https://graph.microsoft.com/v1.0/users/{admin_object_id}"
     graph_headers = {
-        "Authorization": f"Bearer {access_token}"
+        "Authorization": f"Bearer {graph_access_token}"
     }
     graph_response = requests.get(graph_url, headers=graph_headers)
     print("Graph lookup result:", graph_response.json())
