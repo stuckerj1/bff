@@ -25,17 +25,6 @@ fabric_token_response = requests.post(token_url, data=fabric_token_data)
 fabric_token_response.raise_for_status()
 fabric_access_token = fabric_token_response.json()["access_token"]
 
-# Graph token
-graph_token_data = {
-    "grant_type": "client_credentials",
-    "client_id": client_id,
-    "client_secret": client_secret,
-    "scope": graph_scope
-}
-graph_token_response = requests.post(token_url, data=graph_token_data)
-graph_token_response.raise_for_status()
-graph_access_token = graph_token_response.json()["access_token"]
-
 # Step 2: Create Fabric Workspace
 workspace_url = "https://api.fabric.microsoft.com/v1/workspaces"
 headers = {
@@ -67,13 +56,6 @@ if workspace_response.status_code == 201:
 }
 
     print("Assign payload:", assign_payload)
-    # ✅ Graph API lookup to verify object ID
-    graph_url = f"https://graph.microsoft.com/v1.0/users/{admin_object_id}"
-    graph_headers = {
-        "Authorization": f"Bearer {graph_access_token}"
-    }
-    graph_response = requests.get(graph_url, headers=graph_headers)
-    print("Graph lookup result:", graph_response.json())
 
     assign_response = requests.post(assign_url, headers=headers, json=assign_payload)
 
