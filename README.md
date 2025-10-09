@@ -41,13 +41,13 @@ See [`GitHub Repo Structure`](#github-repo-structure-for-benchmarking-framework)
   - Admin role assigned with status code `201`  
   - Retry loop logs error metadata if assignment fails
 
-- [ ] Run GitHub Actions workflow: `Provision Fabric Lakehouses`
+- [ ] Run GitHub Actions workflow: `Provision Fabric Lakehouses and Warehouse`
 
-- [ ] Confirm Lakehouses created successfully:  
-  - Names: `BenchmarkLakehouse` and `DataSourceLakehouse`
-  - Description: "Lakehouse for benchmarking synthetic data and update strategies"  
-  - Created using `POST /v1/workspaces/{workspaceId}/lakehouses`  
-  - Confirm status code `201` and capture `lakehouse_ids`
+- [ ] Confirm Lakehouses and Warehouse are created successfully:  
+  - Names: `BenchmarkLakehouse` and `DataSourceLakehouse` and `BenchmarkWarehouse`
+  - Description: "Lakehouse for benchmarking synthetic data and update strategies"  (similar for warehouse)
+  - Created using `POST /v1/workspaces/{workspaceId}/lakehouses`  (similar for warehouse)
+  - Confirm status code `201` and capture `lakehouse_ids` and `warehouse_id`
 
 - [ ] Folder structure initialized:  
   - `base/` → for initial datasets  
