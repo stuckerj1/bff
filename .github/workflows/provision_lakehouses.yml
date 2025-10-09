@@ -3,6 +3,10 @@ name: Provision Fabric Lakehouses
 on:
   workflow_dispatch:
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
   provision-lakehouses:
     runs-on: ubuntu-latest
