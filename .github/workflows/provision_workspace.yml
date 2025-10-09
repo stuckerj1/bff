@@ -1,4 +1,4 @@
-name: Deploy Fabric Benchmarking Workspace
+name: Provision Fabric Benchmarking Workspace
 
 on:
   workflow_dispatch:
