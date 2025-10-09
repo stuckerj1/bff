@@ -1,4 +1,4 @@
-name: Deploy Fabric Lakehouses
+name: Provision Fabric Lakehouses
 
 on:
   workflow_dispatch:
