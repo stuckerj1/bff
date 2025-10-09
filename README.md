@@ -29,7 +29,7 @@ See [`GitHub Repo Structure`](#github-repo-structure-for-benchmarking-framework)
   - `TENANT_ID`  
   - `CLIENT_ID`  
   - `CLIENT_SECRET`  
-  - `ADMIN_OBJECT_ID` (from Microsoft Entra > Users > [Select user] > 
+  - `ADMIN_OBJECT_ID` (from Microsoft Entra > Users > [Select user] > Overview > Object ID)
   - `CAPACITY_ID` (from Fabric > Admin Portal > Capacity settings > Actions > [Select capacity, e.g. Trial] > Actions > Capacity ID)
 
 - [ ] Add all five secrets to GitHub → Settings → Secrets → Actions
