@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  provision:
+  provision-workspace:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -27,3 +27,9 @@ jobs:
           ADMIN_OBJECT_ID: ${{ secrets.ADMIN_OBJECT_ID }}
         run: |
           python scripts/provision_workspace.py
+
+      - name: Upload workspace ID artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: workspace-id
+          path: .state/workspace_id.txt
