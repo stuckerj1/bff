@@ -25,14 +25,12 @@ See [`GitHub Repo Structure`](#github-repo-structure-for-benchmarking-framework)
   - “Allow service principals to use Fabric APIs”  
   - “Allow service principals to create workspaces”
 
-- [ ] Create client secret and capture:  
+- [ ] Create secrets in GitHub → Settings → Secrets → Actions:  
   - `TENANT_ID`  
   - `CLIENT_ID`  
   - `CLIENT_SECRET`  
   - `ADMIN_OBJECT_ID` (from Microsoft Entra > Users > [Select user] > Overview > Object ID)
   - `CAPACITY_ID` (from Fabric > Admin Portal > Capacity settings > Actions > [Select capacity, e.g. Trial] > Actions > Capacity ID)
-
-- [ ] Add all five secrets to GitHub → Settings → Secrets → Actions
 
 - [ ] Run GitHub Actions workflow: `Provision Fabric Benchmarking Workspace`
 
