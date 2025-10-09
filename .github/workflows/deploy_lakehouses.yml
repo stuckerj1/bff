@@ -1,0 +1,27 @@
+name: Deploy Fabric Lakehouses
+
+on:
+  workflow_dispatch:
+
+jobs:
+  provision-lakehouses:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11' # or your preferred version
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Provision Lakehouses in Fabric Workspace
+        env:
+          TENANT_ID: ${{ secrets.TENANT_ID }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          FABRIC_WORKSPACE_ID: ${{ secrets.FABRIC_WORKSPACE_ID }}
+        run: python scripts/provision_lakehouses.py
