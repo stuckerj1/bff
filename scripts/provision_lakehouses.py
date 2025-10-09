@@ -1,89 +1,53 @@
-"""
-Provision two lakehouses in an existing Fabric workspace:
-- DataSourceLakehouse (serves as external data source)
-- BenchmarkLakehouse (target for benchmarking ingestion)
-
-Usage:
-    Set environment variables for secrets/config:
-        TENANT_ID
-        CLIENT_ID
-        CLIENT_SECRET
-        FABRIC_WORKSPACE_ID
-
-    python scripts/provision_lakehouses.py
-"""
-
 import os
 import requests
-import sys
 
-# Load secrets/config from environment variables
-TENANT_ID = os.environ.get("TENANT_ID")
-CLIENT_ID = os.environ.get("CLIENT_ID")
-CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
-WORKSPACE_ID = os.environ.get("FABRIC_WORKSPACE_ID")
+# Load environment variables
+tenant_id = os.environ.get("TENANT_ID")
+client_id = os.environ.get("CLIENT_ID")
+client_secret = os.environ.get("CLIENT_SECRET")
 
-if not all([TENANT_ID, CLIENT_ID, CLIENT_SECRET, WORKSPACE_ID]):
-    print("Error: One or more required environment variables are missing.")
-    sys.exit(1)
+# Read workspace ID from state file
+with open('.state/workspace_id.txt', 'r') as f:
+    workspace_id = f.read().strip()
 
-# OAuth2 token request (same as in provision_workspace.py)
-FABRIC_SCOPE = "https://api.fabric.microsoft.com/.default"
-TOKEN_URL = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
-
+# Step 1: OAuth2 Token Request
+fabric_scope = "https://api.fabric.microsoft.com/.default"
+token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
 fabric_token_data = {
     "grant_type": "client_credentials",
-    "client_id": CLIENT_ID,
-    "client_secret": CLIENT_SECRET,
-    "scope": FABRIC_SCOPE
+    "client_id": client_id,
+    "client_secret": client_secret,
+    "scope": fabric_scope
 }
-fabric_token_response = requests.post(TOKEN_URL, data=fabric_token_data)
+fabric_token_response = requests.post(token_url, data=fabric_token_data)
 fabric_token_response.raise_for_status()
 fabric_access_token = fabric_token_response.json()["access_token"]
 
-FABRIC_API_BASE = "https://api.fabric.microsoft.com/v1"
+# Step 2: Create Lakehouses
+lakehouse_names = ["BenchmarkLakehouse", "DataSourceLakehouse"]
+lakehouse_ids = []
+lakehouse_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/lakehouses"
+headers = {
+    "Authorization": f"Bearer {fabric_access_token}",
+    "Content-Type": "application/json"
+}
 
-def create_lakehouse(workspace_id, access_token, display_name, description):
-    url = f"{FABRIC_API_BASE}/workspaces/{workspace_id}/lakehouses"
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
-    }
+for name in lakehouse_names:
     payload = {
-        "displayName": display_name,
-        "description": description
+        "displayName": name,
+        "description": f"Lakehouse for {name}"
     }
-    resp = requests.post(url, headers=headers, json=payload)
-    if resp.status_code == 201:
-        lakehouse_id = resp.json().get("id")
-        print(f"Lakehouse '{display_name}' created successfully. ID: {lakehouse_id}")
-        return lakehouse_id
+    response = requests.post(lakehouse_url, headers=headers, json=payload)
+    if response.status_code == 201:
+        lakehouse_id = response.json()["id"]
+        print(f"{name} created. ID: {lakehouse_id}")
+        lakehouse_ids.append(lakehouse_id)
     else:
-        print(f"Failed to create lakehouse '{display_name}'. Status: {resp.status_code}, Message: {resp.text}")
-        return None
+        print(f"Error creating {name}: {response.text}")
 
-def main():
-    ds_lakehouse_id = create_lakehouse(
-        WORKSPACE_ID,
-        fabric_access_token,
-        "DataSourceLakehouse",
-        "Lakehouse serving as the external data source for ingestion simulation"
-    )
-
-    bm_lakehouse_id = create_lakehouse(
-        WORKSPACE_ID,
-        fabric_access_token,
-        "BenchmarkLakehouse",
-        "Lakehouse for benchmarking synthetic data and update strategies"
-    )
-
-    if ds_lakehouse_id and bm_lakehouse_id:
-        print("\nLakehouses provisioned successfully:")
-        print(f"  DataSourceLakehouse ID:   {ds_lakehouse_id}")
-        print(f"  BenchmarkLakehouse ID:    {bm_lakehouse_id}")
-    else:
-        print("\nError: One or more lakehouses could not be created.")
-        sys.exit(1)
-
-if __name__ == "__main__":
-    main()
+# Step 3: Save Lakehouse IDs to state file
+os.makedirs('.state', exist_ok=True)
+with open('.state/lakehouse_ids.txt', 'w') as f:
+    for lakehouse_id in lakehouse_ids:
+        f.write(f"{lakehouse_id}\n")
+print("Lakehouse IDs saved to .state/lakehouse_ids.txt")
