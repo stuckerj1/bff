@@ -85,6 +85,53 @@ See [`GitHub Repo Structure`](#github-repo-structure-for-benchmarking-framework)
 | `query_type` | Filter, Join, Aggregate | 
 | `update_strategy` | Full Refresh, Batch, CDC | 
 
+---
+
+## 🏗️ External Source Simulation Strategy
+
+### External Data Ingestion
+
+To simulate ingesting data from an external system into Microsoft Fabric, the framework currently uses a **separate Fabric lakehouse** as the external data source. Synthetic datasets are generated and stored in this lakehouse as files (Parquet or Delta). This enables realistic benchmarking and makes it easy to automate and parameterize ingestion workflows.
+
+**Why use a separate lakehouse?**
+- Mirrors common real-world scenarios where data lands in a data lake before ingestion into Fabric.
+- Enables shortcut creation and metadata sync latency measurement.
+- Simplifies automation, setup, and reproducibility.
+- Provides flexibility to later swap in other external sources (SQL DB, Blob Storage) with minimal workflow changes.
+
+**Future extensibility:**  
+The workflow is designed so you can easily replace the external lakehouse with an external SQL database or Blob Storage source, to benchmark those ingestion patterns.
+
+---
+
+### Ingestion Targets
+
+After simulating external data, the framework supports ingestion into three target types:
+
+| Target Type           | Description                                   | Reporting Method         |
+|-----------------------|-----------------------------------------------|-------------------------|
+| Lakehouse (Parquet)   | Parquet files ingested into Fabric Lakehouse  | Python charts/notebooks  |
+| Lakehouse (Delta)     | Delta tables ingested into Fabric Lakehouse   | Power BI reports        |
+| Warehouse             | Ingestion into Fabric Warehouse (SQL tables)  | Power BI reports        |
+
+- **Lakehouse (Parquet):** Used for Python-based metric charting and quick analysis.
+- **Lakehouse (Delta) & Warehouse:** Used for Power BI reporting, scorecards, and advanced query performance metrics.
+
+### Reporting Overview
+
+- **Python charts** (matplotlib, seaborn, plotly) are used to visualize metrics for Parquet data in the lakehouse.
+- **Power BI reports** are used for benchmarking and scorecard generation for Delta tables and warehouse data.
+
+---
+
+### Workflow Flexibility
+
+The ingestion module is structured for easy swapping of external sources. To add new external sources:
+- Implement new data generators or connectors (SQL, Blob, etc.) in the synthetic data and ingestion notebooks/scripts.
+- Update the workflow to select the desired external source when running ingestion benchmarks.
+
+---
+
 ## 🧩 Modular Components
 
 ### 1. Synthetic Data Generator
