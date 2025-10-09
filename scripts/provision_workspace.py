@@ -1,4 +1,5 @@
 import os
+import sys
 import requests
 import time
 
@@ -11,11 +12,7 @@ admin_object_id = os.environ.get("ADMIN_OBJECT_ID")
 
 # Step 1: OAuth2 Token Request
 fabric_scope = "https://api.fabric.microsoft.com/.default"
-graph_scope = "https://graph.microsoft.com/.default"
-
 token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
-
-# Fabric token
 fabric_token_data = {
     "grant_type": "client_credentials",
     "client_id": client_id,
@@ -35,7 +32,7 @@ headers = {
 workspace_payload = {
     "displayName": "FabricBenchmarking",
     "description": "Benchmarking workspace for synthetic data tests",
-    "capacityId": os.environ.get("CAPACITY_ID")
+    "capacityId": capacity_id
 }
 workspace_response = requests.post(workspace_url, headers=headers, json=workspace_payload)
 
@@ -46,7 +43,6 @@ if workspace_response.status_code == 201:
     print("Workspace ID:", workspace_id)
 
     # Step 4: Assign initial admin role
-    admin_object_id = os.environ.get("ADMIN_OBJECT_ID")
     assign_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/roleAssignments"
     assign_payload = {
         "principal": {
@@ -60,11 +56,13 @@ if workspace_response.status_code == 201:
 
     max_retries = 3
     retry_delay = 5  # seconds
+    assigned = False  # <-- Initialize before loop
 
     for attempt in range(max_retries):
         assign_response = requests.post(assign_url, headers=headers, json=assign_payload)
         if assign_response.status_code == 201:
             print(f"Assigned {admin_object_id} as Admin.")
+            assigned = True
             break
         else:
             print(f"Attempt {attempt + 1} failed: {assign_response.text}")
@@ -81,6 +79,10 @@ if workspace_response.status_code == 201:
             print(f"Client Request ID: {client_request_id}")
             time.sleep(retry_delay)
 
+    if not assigned:
+        print(f"Failed to assign admin role to {admin_object_id} after {max_retries} attempts. Exiting.")
+        sys.exit(1)
+    
     # Save the workspace ID for future steps
     os.makedirs('.state', exist_ok=True)
     with open('.state/workspace_id.txt', 'w') as f:
@@ -89,3 +91,4 @@ if workspace_response.status_code == 201:
 
 else:
     print("Error creating workspace:", workspace_response.text)
+    sys.exit(1)
