@@ -3,8 +3,10 @@ fabric_workspace:
   capacity: "Premium"
   artifacts:
     lakehouse:
-      name: "BenchmarkLakehouse"
-      folders: ["base", "updates", "cdc"]
+      - name: "BenchmarkLakehouse"
+        folders: ["base", "updates", "cdc"]
+      - name: "DataSourceLakehouse"
+        folders: ["external_data"]  # Add or adjust as needed
     notebooks:
       - generate_data.ipynb
       - ingest_data.ipynb
@@ -20,4 +22,4 @@ fabric_workspace:
       - QueryPerformance.pbix
     shortcuts:
       - path: "/external/lakehouse"
-        target: "CustomerLakehouse"
+        target: "DataSourceLakehouse"
