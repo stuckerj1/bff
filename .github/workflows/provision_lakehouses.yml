@@ -13,16 +13,19 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # or your preferred version
+          python-version: '3.11'
 
       - name: Install dependencies
         run: pip install requests
 
-      - name: Download workspace ID artifact
-        uses: actions/download-artifact@v4
+      - name: Download workspace ID artifact from previous workflow
+        uses: dawidd6/action-download-artifact@v2
         with:
+          workflow: provision_workspace.yml
           name: workspace-id
           path: .state
+          workflow_conclusion: success
+          branch: main
 
       - name: Provision Lakehouses in Fabric Workspace
         env:
