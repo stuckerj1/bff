@@ -1,4 +1,5 @@
 import os
+import sys
 import requests
 
 # Load environment variables
@@ -45,6 +46,7 @@ for name in lakehouse_names:
         lakehouse_ids.append(lakehouse_id)
     else:
         print(f"Error creating {name}: {response.text}")
+        sys.exit(1)
 
 # Step 3: Create Warehouse
 warehouse_name = "BenchmarkWarehouse"
@@ -55,7 +57,6 @@ warehouse_payload = {
 }
 warehouse_response = requests.post(warehouse_url, headers=headers, json=warehouse_payload)
 
-# Log full warehouse response for debugging
 print(f"Warehouse creation status code: {warehouse_response.status_code}")
 print(f"Warehouse creation response text: {warehouse_response.text}")
 
@@ -65,6 +66,7 @@ if warehouse_response.status_code == 201:
     print(f"{warehouse_name} created. ID: {warehouse_id}")
 else:
     print(f"Error creating {warehouse_name}: {warehouse_response.text}")
+    sys.exit(1)
 
 # Step 4: Save IDs to state files
 os.makedirs('.state', exist_ok=True)
@@ -73,7 +75,6 @@ with open('.state/lakehouse_ids.txt', 'w') as f:
         f.write(f"{lakehouse_id}\n")
 print("Lakehouse IDs saved to .state/lakehouse_ids.txt")
 
-if warehouse_id:
-    with open('.state/warehouse_id.txt', 'w') as f:
-        f.write(warehouse_id)
-    print("Warehouse ID saved to .state/warehouse_id.txt")
+with open('.state/warehouse_id.txt', 'w') as f:
+    f.write(warehouse_id)
+print("Warehouse ID saved to .state/warehouse_id.txt")
