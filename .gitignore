@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+dist/
+build/
+env/
+venv/
+ENV/
+
+# Fabric provisioning state files
+.state/
+workspace_id.txt
+lakehouse_ids.txt
+
+# VS Code settings (if using github.dev or local VS Code)
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
