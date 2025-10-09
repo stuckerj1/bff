@@ -80,5 +80,12 @@ if workspace_response.status_code == 201:
             print(f"Request ID: {request_id}")
             print(f"Client Request ID: {client_request_id}")
             time.sleep(retry_delay)
+
+    # Save the workspace ID for future steps
+    os.makedirs('.state', exist_ok=True)
+    with open('.state/workspace_id.txt', 'w') as f:
+        f.write(workspace_id)
+    print(f"Workspace ID saved to .state/workspace_id.txt")
+
 else:
     print("Error creating workspace:", workspace_response.text)
