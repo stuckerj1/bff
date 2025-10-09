@@ -34,16 +34,17 @@ See [`GitHub Repo Structure`](#github-repo-structure-for-benchmarking-framework)
 
 - [ ] Add all five secrets to GitHub → Settings → Secrets → Actions
 
-- [ ] Run GitHub Actions workflow: `Deploy Fabric Benchmarking Workspace`
+- [ ] Run GitHub Actions workflow: `Provision Fabric Benchmarking Workspace`
 
-- [ ] Confirm:  
-  - Workspace created successfully  
+- [ ] Confirm Workspace created successfully:  
   - Workspace ID logged  
   - Admin role assigned with status code `201`  
   - Retry loop logs error metadata if assignment fails
 
-- [ ] Lakehouse created via REST API:  
-  - Name: `BenchmarkLakehouse`  
+- [ ] Run GitHub Actions workflow: `Provision Fabric Lakehouses`
+
+- [ ] Confirm Lakehouses created successfully:  
+  - Names: `BenchmarkLakehouse` and `DataSourceLakehouse`
   - Description: "Lakehouse for benchmarking synthetic data and update strategies"  
   - Created using `POST /v1/workspaces/{workspaceId}/lakehouses`  
   - Confirm status code `201` and capture `lakehouse_id`
