@@ -54,6 +54,11 @@ warehouse_payload = {
     "description": "Warehouse for benchmarking copy and shortcut scenarios"
 }
 warehouse_response = requests.post(warehouse_url, headers=headers, json=warehouse_payload)
+
+# Log full warehouse response for debugging
+print(f"Warehouse creation status code: {warehouse_response.status_code}")
+print(f"Warehouse creation response text: {warehouse_response.text}")
+
 warehouse_id = None
 if warehouse_response.status_code == 201:
     warehouse_id = warehouse_response.json()["id"]
