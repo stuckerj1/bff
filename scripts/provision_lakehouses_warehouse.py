@@ -23,14 +23,15 @@ fabric_token_response = requests.post(token_url, data=fabric_token_data)
 fabric_token_response.raise_for_status()
 fabric_access_token = fabric_token_response.json()["access_token"]
 
-# Step 2: Create Lakehouses
-lakehouse_names = ["BenchmarkLakehouse", "DataSourceLakehouse"]
-lakehouse_ids = []
-lakehouse_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/lakehouses"
 headers = {
     "Authorization": f"Bearer {fabric_access_token}",
     "Content-Type": "application/json"
 }
+
+# Step 2: Create Lakehouses
+lakehouse_names = ["BenchmarkLakehouse", "DataSourceLakehouse"]
+lakehouse_ids = []
+lakehouse_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/lakehouses"
 
 for name in lakehouse_names:
     payload = {
@@ -45,9 +46,29 @@ for name in lakehouse_names:
     else:
         print(f"Error creating {name}: {response.text}")
 
-# Step 3: Save Lakehouse IDs to state file
+# Step 3: Create Warehouse
+warehouse_name = "BenchmarkWarehouse"
+warehouse_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/warehouses"
+warehouse_payload = {
+    "displayName": warehouse_name,
+    "description": "Warehouse for benchmarking copy and shortcut scenarios"
+}
+warehouse_response = requests.post(warehouse_url, headers=headers, json=warehouse_payload)
+warehouse_id = None
+if warehouse_response.status_code == 201:
+    warehouse_id = warehouse_response.json()["id"]
+    print(f"{warehouse_name} created. ID: {warehouse_id}")
+else:
+    print(f"Error creating {warehouse_name}: {warehouse_response.text}")
+
+# Step 4: Save IDs to state files
 os.makedirs('.state', exist_ok=True)
 with open('.state/lakehouse_ids.txt', 'w') as f:
     for lakehouse_id in lakehouse_ids:
         f.write(f"{lakehouse_id}\n")
 print("Lakehouse IDs saved to .state/lakehouse_ids.txt")
+
+if warehouse_id:
+    with open('.state/warehouse_id.txt', 'w') as f:
+        f.write(warehouse_id)
+    print("Warehouse ID saved to .state/warehouse_id.txt")
