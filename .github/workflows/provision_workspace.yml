@@ -29,7 +29,7 @@ jobs:
           python scripts/provision_workspace.py
 
       - name: Upload workspace ID artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: workspace-id
           path: .state/workspace_id.txt
