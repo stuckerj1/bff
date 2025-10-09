@@ -22,7 +22,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: workspace-id
-          path: .state
+          path: .state/workspace_id.txt
 
       - name: Provision Lakehouses in Fabric Workspace
         env:
