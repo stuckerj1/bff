@@ -459,3 +459,50 @@ automation:
 - 6.2 Notebook execution time tracking
 - 6.3 Shortcut metadata sync latency
 - 6.4 Storage footprint and compute time
+
+### 🧩 WBS-to-Python File Mapping
+
+| WBS Phase | Task Description | Python File |
+|-----------|------------------|-------------|
+| 1.1–1.2 | Create Fabric workspace and assign admin role | `provision_workspace.py` |
+| 1.3 | Create Lakehouse | `provision_lakehouse.py` |
+| 2.5 | Generate synthetic datasets | `generate_data.py` |
+| 3.1 | Ingest datasets | `ingest_data.py` |
+| 3.3 | Apply update strategies | `ingest_data.py` |
+| 3.4 | Run query benchmarks | `benchmark_queries.py` |
+| 5.1 | Generate scorecard | `scorecard_generator.py` |
+| 5.2 | Automate test sweeps | GitHub Actions workflows |
+| 6.1–6.4 | Capture metrics | `benchmark_queries.py`, `scorecard_generator.py` |
+
+### 📚 Artifact-to-WBS Mapping
+
+#### 🧪 Notebooks
+
+| Notebook Purpose | WBS Phase | Description |
+|------------------|-----------|-------------|
+| `data_generation.ipynb` | 2.1.1, 2.5 | Generates synthetic datasets and update slices |
+| `ingestion.ipynb` | 2.1.2, 3.1 | Ingests data using full refresh, batch, and CDC |
+| `update_logic.ipynb` | 2.1.3, 3.3 | Applies update strategies and validates correctness |
+| `query_benchmarking.ipynb` | 2.1.4, 3.4 | Runs filter, join, and aggregate queries |
+| `metric_capture.ipynb` | 4.1–4.4 | Captures ingestion, update, query, and capacity metrics |
+
+---
+
+#### 📊 Semantic Model
+
+| Component | WBS Phase | Description |
+|-----------|-----------|-------------|
+| Delta Table Connections | 2.2.1 | Connects semantic model to benchmarked Delta tables |
+| Measures & Relationships | 2.2.2 | Defines metrics for ingestion, update, and query performance |
+
+---
+
+#### 📈 Power BI Reports
+
+| Report Name | WBS Phase | Description |
+|-------------|-----------|-------------|
+| Scorecard | 2.3.1, 5.1 | Tabular comparison of test cases |
+| Refresh Latency | 2.3.2, 4.1.1 | Tracks dataset and report refresh times |
+| Query Performance | 2.3.3, 4.3 | Visualizes query execution metrics |
+| Capacity Cost – Storage | 2.3.4, 4.4.1 | Estimates storage impact per test case |
+| Capacity Cost – Processing | 2.3.5, 4.4.2 | Tracks compute time and refresh frequency impact |
