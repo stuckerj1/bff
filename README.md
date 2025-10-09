@@ -135,110 +135,34 @@ The ingestion module is structured for easy swapping of external sources. To add
 
 ## 🧩 Modular Components
 
-### 1. Synthetic Data Generator
+### 1. Synthetic Data Generation
+- **Purpose:** Create parameterized synthetic datasets (base and incremental slices) in DataSourceLakehouse.
+- **Parameters:** `row_count` (e.g., 10K, 1M), schema, distribution, change %, insert %, delete %.
+- **Output:** Parquet/Delta base data, batch update slices, CDC slices.
 
-**Parameters:**
-- `row_count`: 10K, 1M
-- `schema_config`: categorical, numeric, timestamp fields
-- `distribution`: uniform, skewed, null injection
+### 2. Ingestion & Lakehouse/Warehouse Provisioning
+- **Targets:** 
+  - Parquet in BenchmarkLakehouse
+  - Delta in BenchmarkLakehouse with shortcut in BenchmarkWarehouse
+  - Copy in BenchmarkWarehouse
+- **Note:** Includes step to provision BenchmarkWarehouse.
 
-**Output:**
-- Base DataFrame saved as Parquet or Delta
-- Update slices for CDC and batch scenarios
+### 3. Update Strategy & Incremental Load Performance Testing
+- **Strategies:** Full Refresh, Batch (append/deduplication), CDC (merge logic).
+- **Purpose:** Benchmark incremental ingestion for all targets.
+- **Metrics:** Ingestion time, update latency, resource usage, reliability, correctness metrics.
 
-**Approach:**
-- Pre-generate base datasets in different sizes (10K, 1M)
-- Create incremental update slices:
-  - 1.0% of rows changed
-  - 0.5% new inserts
-  - 0.1% deletes
-- Store update slices in separate folders or tables:
-  - `updates/` for batch
-  - `cdc/` for merge
-- Tag update files with metadata (e.g., timestamp, change type)
-- Use deterministic logic for reproducibility
+### 4. Query Performance Testing
+- **Modes:**
+  - Notebook/Python (Parquet)
+  - Power BI (Delta via shortcut)
+  - Power BI (Warehouse copy)
+- **Metrics:** Query time, refresh latency, resource usage.
 
-### 2. Ingestion Module
+### 5. Scorecard & Capacity/Cost Metrics Capture
+- **Purpose:** Compile results, track workspace utilization, storage/compute footprint, refresh rates, and estimated cost per test case.
+- **Tools:** Fabric Metrics App, notebook logging, Power BI dashboards, comparative tables.
 
-**Parameters:**
-- `format`, `location`, `row_count`
-- `update_strategy`
-
-**Modes:**
-- Full Refresh (`overwrite`)
-- Batch (`append` + deduplication)
-- CDC (`merge` or `applyChanges()`)
-
-**Output:**
-- Ingestion time
-- Storage footprint
-
-### 3. Update Strategy Module
-
-**Logic:**
-- Full Refresh: `overwrite`
-- Batch: `append` + deduplication
-- CDC: `MERGE INTO` or `applyChanges()`
-
-**Inputs:**
-- `update_strategy`, change data
-
-**Output:**
-- Update latency
-- Correctness metrics
-
-### 4. Shortcut Creation Module
-
-**Inputs:**
-- Source path, target workspace
-
-**Output:**
-- Metadata sync latency
-- Shortcut validation
-
-### 5. Query Benchmarking Module
-
-**Inputs:**
-- `query_type`, `access_mode`
-
-**Types:**
-- Filter, Join, Aggregate
-
-**Engines:**
-- PySpark (exploration)
-- Power BI (reporting)
-
-**Output:**
-- Query time
-- Resource usage
-- Refresh latency
-
-### 6. Scorecard Generator
-
-**Inputs:**
-- All test case metrics
-
-**Output:**
-- Comparative table with ingestion, update, query stats
-
-### 7. Metric Capture Layer
-
-**Capacity:**
-- Workspace-level metrics via Fabric Capacity Metrics App
-
-**Performance:**
-- Query duration
-- Ingestion latency
-- Refresh times
-
-**Cost:**
-- Storage footprint
-- Compute time
-
-**Utilization:**
-- Dataset refresh logs
-- Notebook execution time
-- Shortcut latency
 
 ## 🏗️ Deployment Architecture
 
