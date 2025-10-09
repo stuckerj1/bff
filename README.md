@@ -47,7 +47,7 @@ See [`GitHub Repo Structure`](#github-repo-structure-for-benchmarking-framework)
   - Names: `BenchmarkLakehouse` and `DataSourceLakehouse`
   - Description: "Lakehouse for benchmarking synthetic data and update strategies"  
   - Created using `POST /v1/workspaces/{workspaceId}/lakehouses`  
-  - Confirm status code `201` and capture `lakehouse_id`
+  - Confirm status code `201` and capture `lakehouse_ids`
 
 - [ ] Folder structure initialized:  
   - `base/` → for initial datasets  
