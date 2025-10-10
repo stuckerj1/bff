@@ -47,7 +47,9 @@ See [`GitHub Repo Structure`](#github-repo-structure-for-benchmarking-framework)
   - Created using `POST /v1/workspaces/{workspaceId}/lakehouses`  (similar for warehouse)
   - Confirm status code `201` and capture `lakehouse_ids` and `warehouse_id`
 
-- [ ] Folder structure initialized:  
+- [ ] Run GitHub Actions workflow: `Generate synthetic data in DataSourceLakehouse`
+
+- [ ] Confirm DataSourceLakehouse folder structure and data:  
   - `base/` → for initial datasets  
   - `updates/` → for batch update slices  
   - `cdc/` → for CDC merge slices  
