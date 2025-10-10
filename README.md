@@ -26,9 +26,9 @@ See [`GitHub Repo Structure`](#github-repo-structure-for-benchmarking-framework)
   - “Allow service principals to create workspaces”
 
 - [ ] Create secrets in GitHub → Settings → Secrets → Actions:  
-  - `TENANT_ID`  
-  - `CLIENT_ID`  
-  - `CLIENT_SECRET`  
+  - `TENANT_ID`  (from Microsoft Entra > App registrations > FabricBenchmarkingProvisioner > Overview > Directory (tenant) ID)
+  - `CLIENT_ID`  (from Microsoft Entra > App registrations > FabricBenchmarkingProvisioner > Overview >  Application (client) ID)
+  - `CLIENT_SECRET`  (create and immediately copy from Microsoft Entra > App registrations > FabricBenchmarkingProvisioner > Certificates & secrets > New client secret > BFF Client Secret)
   - `ADMIN_OBJECT_ID` (from Microsoft Entra > Users > [Select user] > Overview > Object ID)
   - `CAPACITY_ID` (from Fabric > Admin Portal > Capacity settings > Actions > [Select capacity, e.g. Trial] > Actions > Capacity ID)
 
