@@ -71,7 +71,7 @@ platform_metadata = (
     "# META     }\n"
     "# META   }\n"
     "# META }\n"
-    "pass\n"
+    "def __fabric_metadata__(): pass\n"
 )
 
 with open(platform_py_path, "w", encoding="utf-8") as f:
