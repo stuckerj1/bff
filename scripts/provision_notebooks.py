@@ -20,6 +20,8 @@ def read_state_file(filename):
 
 workspace_id = read_state_file("workspace_id.txt")
 
+print(f"[DEBUG] Using workspace_id for data source: {workspace_id}")  # <-- Debug line added
+
 # Read first lakehouse ID from .state/lakehouse_ids.txt
 lakehouse_ids_path = os.path.join('.state', 'lakehouse_ids.txt')
 if not os.path.exists(lakehouse_ids_path):
@@ -78,7 +80,7 @@ payload = {
         ]
     },
     "defaultLakehouse": {
-        "name": "<name of the lakehouse>",
+        "name": "DataSourceLakehouse",
         "id": lakehouse_id,
         "workspaceId": workspace_id
     },
