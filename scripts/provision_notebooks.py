@@ -93,6 +93,7 @@ ipynb_encoded = encode_file(notebook_path)
 upload_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks"
 payload = {
     "displayName": notebook_display_name,
+    "type": "Notebook",    
     "definition": {
         "parts": [
             {
