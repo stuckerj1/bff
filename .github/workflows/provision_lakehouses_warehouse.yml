@@ -20,7 +20,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install -r requirements.txt
 
       - name: Download workspace ID artifact from previous workflow
         uses: dawidd6/action-download-artifact@v2
