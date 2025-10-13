@@ -117,21 +117,28 @@ print("Response:", response.text)
 
 # Populate .state/notebook_ids.txt artifact if notebook was created
 notebook_ids_path = os.path.join('.state', 'notebook_ids.txt')
+notebook_id_saved = False
 try:
     if response.status_code in (200, 201):
         notebook_id = response.json()["id"]
         with open(notebook_ids_path, "w") as f:
             f.write(f"{notebook_id}\n")
         print(f"Notebook ID saved to {notebook_ids_path}")
+        notebook_id_saved = True
     elif response.status_code == 202:
         notebook_id = response.json().get("id")
         if notebook_id:
             with open(notebook_ids_path, "w") as f:
                 f.write(f"{notebook_id}\n")
             print(f"Notebook ID saved to {notebook_ids_path}")
+            notebook_id_saved = True
         else:
             print("Notebook creation is asynchronous (202). Notebook ID not available yet.")
     else:
         print("Notebook was not created. No ID saved to .state/notebook_ids.txt.")
 except Exception as e:
     print(f"Could not extract notebook ID from response: {e}")
+
+if not notebook_id_saved:
+    print("ERROR: Notebook provisioning failed. See above for details.")
+    sys.exit(1)  # Explicitly exit with error for workflow failure
