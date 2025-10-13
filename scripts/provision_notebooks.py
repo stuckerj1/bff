@@ -71,6 +71,7 @@ platform_metadata = (
     "# META     }\n"
     "# META   }\n"
     "# META }\n"
+    "\n"
 )
 platform_metadata += "\npass  # Required to make this a valid Python file"
 with open(platform_py_path, "w", encoding="utf-8") as f:
