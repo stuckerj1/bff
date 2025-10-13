@@ -56,21 +56,17 @@ for notebook in notebooks_to_create:
         print(f"Notebook file not found: {ipynb_path}")
         sys.exit(1)
     with open(ipynb_path, "r", encoding="utf-8") as f:
-        ipynb_json = json.load(f)
+        notebook_str = f.read()  # STRING!
 
-    # Transform each cell into a Fabric part
-    parts = []
-    for idx, cell in enumerate(ipynb_json.get("cells", [])):
-        part = {
-            "payloadType": "NotebookCell",
-            "Path": f"/content/cells/{idx}",
-            "Payload": cell
-        }
-        parts.append(part)
+    parts = [{
+        "payloadType": "NotebookFile",
+        "Path": "/content/notebook.ipynb",
+        "Payload": notebook_str
+    }]
 
-    fabric_definition = ipynb_json.copy()
-    fabric_definition.pop("cells", None)
-    fabric_definition["parts"] = parts
+    fabric_definition = {
+        "parts": parts
+    }
 
     payload = {
         "createItemRequest": {
