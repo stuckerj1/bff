@@ -3,7 +3,6 @@ import requests
 import sys
 import json
 
-# Load environment variables (secrets)
 tenant_id = os.environ.get("TENANT_ID")
 client_id = os.environ.get("CLIENT_ID")
 client_secret = os.environ.get("CLIENT_SECRET")
@@ -28,7 +27,6 @@ if os.path.exists(lakehouse_ids_path):
         lakehouse_ids = [line.strip() for line in f if line.strip()]
 warehouse_id = read_id("warehouse_id.txt")
 
-# Authenticate: get Fabric access token
 token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
 fabric_scope = "https://api.fabric.microsoft.com/.default"
 token_data = {
@@ -80,28 +78,12 @@ for notebook in notebooks_to_create:
     with open(ipynb_path, "r", encoding="utf-8") as f:
         ipynb_json = json.load(f)
 
-    # Transform each cell into a Fabric part
-    parts = []
-    for idx, cell in enumerate(ipynb_json.get("cells", [])):
-        part = {
-            "payloadType": "NotebookCell",
-            "Path": f"/content/cells/{idx}",
-            "Payload": cell
-        }
-        parts.append(part)
-
-    # Optionally include notebook-level metadata
-    fabric_definition = {
-        "parts": parts,
-        "metadata": ipynb_json.get("metadata", {}),
-        "nbformat": ipynb_json.get("nbformat", 4),
-        "nbformat_minor": ipynb_json.get("nbformat_minor", 0)
-    }
-
     payload = {
-        "displayName": notebook["displayName"],
-        "description": notebook["description"],
-        "definition": fabric_definition,
+        "createItemRequest": {
+            "displayName": notebook["displayName"],
+            "description": notebook["description"]
+        },
+        "definition": ipynb_json
     }
     response = requests.post(notebook_url, headers=headers, json=payload)
     print(f"Uploading notebook '{notebook['displayName']}' from {ipynb_path}...")
