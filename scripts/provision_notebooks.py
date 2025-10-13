@@ -47,7 +47,7 @@ headers = {
     "Content-Type": "application/json"
 }
 
-# Define notebooks to create, with file paths
+# Define notebooks to create, with file paths (snake case)
 notebooks_to_create = [
     {
         "displayName": "1.GenerateData",
@@ -75,18 +75,18 @@ notebook_ids = []
 notebook_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks"
 
 for notebook in notebooks_to_create:
-    # Read notebook content from file
+    # Read notebook content from file as JSON object
     ipynb_path = notebook["file"]
     if not os.path.exists(ipynb_path):
         print(f"Notebook file not found: {ipynb_path}")
         sys.exit(1)
     with open(ipynb_path, "r", encoding="utf-8") as f:
-        notebook_content = json.load(f)  # Load as JSON object
+        notebook_definition = json.load(f)  # Parse as JSON object
 
     payload = {
         "displayName": notebook["displayName"],
         "description": notebook["description"],
-        "content": notebook_content,  # Pass as JSON object
+        "definition": notebook_definition,  # Use 'definition' as per API docs
     }
     response = requests.post(notebook_url, headers=headers, json=payload)
     print(f"Uploading notebook '{notebook['displayName']}' from {ipynb_path}...")
