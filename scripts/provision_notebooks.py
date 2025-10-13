@@ -47,23 +47,27 @@ headers = {
     "Content-Type": "application/json"
 }
 
-# Define notebooks to create
+# Define notebooks to create, with file paths
 notebooks_to_create = [
     {
         "displayName": "1.GenerateData",
-        "description": "Notebook for synthetic data generation"
+        "description": "Notebook for synthetic data generation",
+        "file": "bff/notebooks/generate_data.ipynb",
     },
     {
         "displayName": "2.IngestData",
-        "description": "Notebook for ingesting data into lakehouse/warehouse"
+        "description": "Notebook for ingesting data into lakehouse/warehouse",
+        "file": "bff/notebooks/ingest_data.ipynb",
     },
     {
         "displayName": "3.ApplyUpdates",
-        "description": "Notebook for applying incremental updates"
+        "description": "Notebook for applying incremental updates",
+        "file": "bff/notebooks/apply_updates.ipynb",
     },
     {
         "displayName": "4.RunQueries",
-        "description": "Notebook for running benchmark queries"
+        "description": "Notebook for running benchmark queries",
+        "file": "bff/notebooks/run_queries.ipynb",
     }
 ]
 
@@ -71,12 +75,23 @@ notebook_ids = []
 notebook_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks"
 
 for notebook in notebooks_to_create:
+    # Read notebook content from file
+    ipynb_path = notebook["file"]
+    if not os.path.exists(ipynb_path):
+        print(f"Notebook file not found: {ipynb_path}")
+        sys.exit(1)
+    with open(ipynb_path, "r", encoding="utf-8") as f:
+        notebook_content = json.load(f)  # Load as JSON object
+
     payload = {
         "displayName": notebook["displayName"],
         "description": notebook["description"],
-        # Add additional config here if needed
+        "content": notebook_content,  # Pass as JSON object
     }
     response = requests.post(notebook_url, headers=headers, json=payload)
+    print(f"Uploading notebook '{notebook['displayName']}' from {ipynb_path}...")
+    print("Status:", response.status_code)
+    print("Response:", response.text)
     if response.status_code == 201:
         notebook_id = response.json()["id"]
         print(f"Created notebook '{notebook['displayName']}' (ID: {notebook_id})")
