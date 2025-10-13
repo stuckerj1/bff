@@ -4,12 +4,12 @@ import json
 import base64
 import requests
 
-# Load secrets
+# Secrets from environment
 tenant_id = os.environ.get("TENANT_ID")
 client_id = os.environ.get("CLIENT_ID")
 client_secret = os.environ.get("CLIENT_SECRET")
 
-# Read workspace and lakehouse IDs
+# Helper to read state file contents
 def read_state_file(filename):
     path = os.path.join('.state', filename)
     if not os.path.exists(path):
@@ -33,7 +33,7 @@ if not lakehouse_ids:
     sys.exit(1)
 lakehouse_id = lakehouse_ids[0]  # Use the first Lakehouse ID
 
-# Get access token
+# Get Fabric access token
 token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
 fabric_scope = "https://api.fabric.microsoft.com/.default"
 token_data = {
@@ -61,7 +61,7 @@ with open(notebook_path, "rb") as f:
     notebook_bytes = f.read()
 notebook_base64 = base64.b64encode(notebook_bytes).decode("utf-8")
 
-# Create the payload for /items
+# Create the payload for /items, with Lakehouse as data source
 payload = {
     "displayName": "1.GenerateData",
     "type": "Notebook",
