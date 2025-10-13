@@ -81,12 +81,17 @@ for notebook in notebooks_to_create:
         print(f"Notebook file not found: {ipynb_path}")
         sys.exit(1)
     with open(ipynb_path, "r", encoding="utf-8") as f:
-        notebook_definition = json.load(f)  # Parse as JSON object
+        ipynb_json = json.load(f)
+
+    # Transform: rename 'cells' -> 'parts' for Fabric API
+    fabric_definition = ipynb_json.copy()
+    if "cells" in fabric_definition:
+        fabric_definition["parts"] = fabric_definition.pop("cells")
 
     payload = {
         "displayName": notebook["displayName"],
         "description": notebook["description"],
-        "definition": notebook_definition,  # Use 'definition' as per API docs
+        "definition": fabric_definition,
     }
     response = requests.post(notebook_url, headers=headers, json=payload)
     print(f"Uploading notebook '{notebook['displayName']}' from {ipynb_path}...")
