@@ -1,79 +1,19 @@
 import os
-import sys
 import json
 import base64
 import requests
 
-# Helper to read state file contents
-def read_state_file(filename):
-    path = os.path.join('.state', filename)
-    if not os.path.exists(path):
-        print(f"State file not found: {filename}")
-        sys.exit(1)
-    with open(path, "r") as f:
-        return f.read().strip()
-
-# Load secrets and IDs
-tenant_id = os.environ.get("TENANT_ID")
-client_id = os.environ.get("CLIENT_ID")
-client_secret = os.environ.get("CLIENT_SECRET")
-workspace_id = read_state_file("workspace_id.txt")
-
-lakehouse_ids_path = os.path.join('.state', 'lakehouse_ids.txt')
-if not os.path.exists(lakehouse_ids_path):
-    print(f"Lakehouse IDs file not found: {lakehouse_ids_path}")
-    sys.exit(1)
-with open(lakehouse_ids_path, "r") as f:
-    lakehouse_ids = [line.strip() for line in f if line.strip()]
-if not lakehouse_ids or len(lakehouse_ids) < 2:
-    print("Insufficient Lakehouse IDs found in lakehouse_ids.txt")
-    sys.exit(1)
-lakehouse_id = lakehouse_ids[1]  # DataSourceLakehouse (second entry)
-lakehouse_name = "DataSourceLakehouse" # Update if your lakehouse name is different
-
-print(f"[DEBUG] Using workspace_id: {workspace_id}")
-print(f"[DEBUG] Using lakehouse_id for data source: {lakehouse_id}")
-print(f"[DEBUG] Lakehouse name: {lakehouse_name}")
-
-# Notebook info
+# === CONFIGURATION ===
 notebook_display_name = "1.GenerateData"
 notebook_path = "notebooks/generate_data.ipynb"
-platform_path = ".platform"
+lakehouse_name = "DataSourceLakehouse"
+platform_py_path = "platform_metadata.py"
 
-if not os.path.exists(notebook_path):
-    print(f"Notebook file not found: {notebook_path}")
-    sys.exit(1)
+# === AUTHENTICATION ===
+tenant_id = os.environ["TENANT_ID"]
+client_id = os.environ["CLIENT_ID"]
+client_secret = os.environ["CLIENT_SECRET"]
 
-# Create .platform metadata file (correct JSON structure for Fabric)
-platform_metadata = (
-    "# Fabric notebook source\n"
-    "# METADATA ********************\n"
-    "# META {\n"
-    "# META   \"kernel_info\": {\n"
-    "# META     \"name\": \"synapse_pyspark\"\n"
-    "# META   },\n"
-    "# META   \"dependencies\": {\n"
-    "# META     \"lakehouse\": {\n"
-    "# META       \"default_lakehouse\": \"" + lakehouse_id + "\",\n"
-    "# META       \"default_lakehouse_name\": \"" + lakehouse_name + "\",\n"
-    "# META       \"default_lakehouse_workspace_id\": \"" + workspace_id + "\"\n"
-    "# META     }\n"
-    "# META   }\n"
-    "# META }\n"
-)
-
-with open(platform_path, "w", encoding="utf-8") as f:
-    f.write(platform_metadata)
-
-# Helper to base64 encode files
-def encode_file(path):
-    with open(path, "rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8")
-
-platform_encoded = encode_file(platform_path)
-ipynb_encoded = encode_file(notebook_path)
-
-# Get Fabric access token
 token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
 token_data = {
     "grant_type": "client_credentials",
@@ -84,16 +24,71 @@ token_data = {
 token_resp = requests.post(token_url, data=token_data)
 token_resp.raise_for_status()
 access_token = token_resp.json()["access_token"]
-
 headers = {
     "Authorization": f"Bearer {access_token}",
     "Content-Type": "application/json"
 }
 
-# Compose notebook upload payload with .platform metadata
+# === RESOLVE WORKSPACE ID ===
+ws_resp = requests.get("https://api.fabric.microsoft.com/v1/workspaces", headers=headers)
+ws_resp.raise_for_status()
+workspace_id = next(
+    (w["id"] for w in ws_resp.json()["value"] if w["displayName"] == workspace_name),
+    None
+)
+if not workspace_id:
+    raise Exception(f"Workspace '{workspace_name}' not found.")
+
+# === RESOLVE LAKEHOUSE ID ===
+lh_resp = requests.get(f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/lakehouses", headers=headers)
+lh_resp.raise_for_status()
+lakehouse_id = next(
+    (l["id"] for l in lh_resp.json()["value"] if l["displayName"] == lakehouse_name),
+    None
+)
+if not lakehouse_id:
+    raise Exception(f"Lakehouse '{lakehouse_name}' not found in workspace '{workspace_name}'.")
+
+print(f"[DEBUG] Using workspace_id: {workspace_id}")
+print(f"[DEBUG] Using lakehouse_id for data source: {lakehouse_id}")
+print(f"[DEBUG] Lakehouse name: {lakehouse_name}")
+
+# === GENERATE .py METADATA FILE ===
+platform_metadata = f"""# Fabric notebook source
+# METADATA ********************
+# META {{
+# META   "kernel_info": {{
+# META     "name": "synapse_pyspark"
+# META   }},
+# META   "dependencies": {{
+# META     "lakehouse": {{
+# META       "default_lakehouse": "{lakehouse_id}",
+# META       "default_lakehouse_name": "{lakehouse_name}",
+# META       "default_lakehouse_workspace_id": "{workspace_id}"
+# META     }}
+# META   }}
+# META }}
+print("Platform metadata loaded")
+"""
+with open(platform_py_path, "w", encoding="utf-8") as f:
+    f.write(platform_metadata)
+print("----- platform_metadata.py contents -----")
+with open(platform_py_path, "r", encoding="utf-8") as debug_f:
+    print(debug_f.read())
+print("----- end platform_metadata.py -----")
+
+# === BASE64 ENCODE FILES ===
+def encode_file(path):
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
+platform_encoded = encode_file(platform_py_path)
+ipynb_encoded = encode_file(notebook_path)
+
+# === UPLOAD NOTEBOOK ===
+upload_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks"
 payload = {
     "displayName": notebook_display_name,
-    "type": "Notebook",
     "definition": {
         "parts": [
             {
@@ -109,24 +104,22 @@ payload = {
         ]
     }
 }
+upload_resp = requests.post(upload_url, headers=headers, data=json.dumps(payload))
+print("Status:", upload_resp.status_code)
+print("Response:", upload_resp.text)
 
-upload_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks"
-response = requests.post(upload_url, headers=headers, data=json.dumps(payload))
-print("Status:", response.status_code)
-print("Response:", response.text)
-
-# Populate .state/notebook_ids.txt artifact if notebook was created
+# === Save Notebook ID if created ===
 notebook_ids_path = os.path.join('.state', 'notebook_ids.txt')
 notebook_id_saved = False
 try:
-    if response.status_code in (200, 201):
-        notebook_id = response.json()["id"]
+    if upload_resp.status_code in (200, 201):
+        notebook_id = upload_resp.json()["id"]
         with open(notebook_ids_path, "w") as f:
             f.write(f"{notebook_id}\n")
         print(f"Notebook ID saved to {notebook_ids_path}")
         notebook_id_saved = True
-    elif response.status_code == 202:
-        notebook_id = response.json().get("id")
+    elif upload_resp.status_code == 202:
+        notebook_id = upload_resp.json().get("id")
         if notebook_id:
             with open(notebook_ids_path, "w") as f:
                 f.write(f"{notebook_id}\n")
@@ -141,4 +134,4 @@ except Exception as e:
 
 if not notebook_id_saved:
     print("ERROR: Notebook provisioning failed. See above for details.")
-    sys.exit(1)  # Explicitly exit with error for workflow failure
+    sys.exit(1)  # Explicit failure for CI
