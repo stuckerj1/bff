@@ -3,6 +3,10 @@ name: Provision Notebooks
 on:
   workflow_dispatch:
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
   provision-notebooks:
     runs-on: ubuntu-latest
