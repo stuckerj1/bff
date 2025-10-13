@@ -14,23 +14,32 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download workspace ID artifact
-        uses: actions/download-artifact@v4
+      - name: Download workspace ID artifact from previous workflow
+        uses: dawidd6/action-download-artifact@v2
         with:
+          workflow: provision_workspace.yml
           name: workspace-id
-          path: .state/
+          path: .state
+          workflow_conclusion: success
+          branch: main
 
-      - name: Download lakehouse IDs artifact
-        uses: actions/download-artifact@v4
+      - name: Download lakehouse IDs artifact from previous workflow
+        uses: dawidd6/action-download-artifact@v2
         with:
+          workflow: provision_lakehouses_warehouse.yml
           name: lakehouse-ids
-          path: .state/
+          path: .state
+          workflow_conclusion: success
+          branch: main
 
-      - name: Download warehouse ID artifact
-        uses: actions/download-artifact@v4
+      - name: Download warehouse ID artifact from previous workflow
+        uses: dawidd6/action-download-artifact@v2
         with:
+          workflow: provision_lakehouses_warehouse.yml
           name: warehouse-id
-          path: .state/
+          path: .state
+          workflow_conclusion: success
+          branch: main
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -40,8 +49,11 @@ jobs:
       - name: Install requirements
         run: pip install -r requirements.txt
 
+      - name: Export WORKSPACE_ID env var
+        run: echo "WORKSPACE_ID=$(cat .state/workspace_id.txt)" >> $GITHUB_ENV
+
       - name: Provision Notebooks
-        run: python scripts/provision_notebooks.py
+        run: python bff/scripts/provision_notebooks.py
 
       - name: Upload notebook IDs artifact
         uses: actions/upload-artifact@v4
