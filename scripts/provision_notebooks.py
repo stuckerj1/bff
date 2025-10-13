@@ -31,7 +31,9 @@ with open(lakehouse_ids_path, "r") as f:
 if not lakehouse_ids:
     print("No lakehouse IDs found in lakehouse_ids.txt")
     sys.exit(1)
-lakehouse_id = lakehouse_ids[0]  # Use the first Lakehouse ID
+lakehouse_id = lakehouse_ids[1]  # Use the second Lakehouse ID, base 0
+
+print(f"[DEBUG] Using lakehouse_id for data source: {lakehouse_id}")  # <-- Debug line added
 
 # Get Fabric access token
 token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
