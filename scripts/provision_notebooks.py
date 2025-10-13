@@ -9,7 +9,7 @@ notebook_display_name = "1.GenerateData"
 notebook_path = "notebooks/generate_data.ipynb"
 lakehouse_name = "DataSourceLakehouse"
 workspace_name = "FabricBenchmarking"
-platform_py_path = ".platform"
+platform_py_path = ".platform.py"
 
 # === AUTHENTICATION ===
 tenant_id = os.environ["TENANT_ID"]
