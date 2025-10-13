@@ -50,19 +50,19 @@ headers = {
 # Define notebooks to create
 notebooks_to_create = [
     {
-        "displayName": "GenerateData",
+        "displayName": "1.GenerateData",
         "description": "Notebook for synthetic data generation"
     },
     {
-        "displayName": "IngestData",
+        "displayName": "2.IngestData",
         "description": "Notebook for ingesting data into lakehouse/warehouse"
     },
     {
-        "displayName": "ApplyUpdates",
+        "displayName": "3.ApplyUpdates",
         "description": "Notebook for applying incremental updates"
     },
     {
-        "displayName": "RunQueries",
+        "displayName": "4.RunQueries",
         "description": "Notebook for running benchmark queries"
     }
 ]
