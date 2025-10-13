@@ -1,112 +1,89 @@
 import os
 import sys
-import time
+import json
+import base64
 import requests
 
-# Load environment variables
+# Load secrets
 tenant_id = os.environ.get("TENANT_ID")
 client_id = os.environ.get("CLIENT_ID")
 client_secret = os.environ.get("CLIENT_SECRET")
 
-# Read workspace ID from state file
-with open('.state/workspace_id.txt', 'r') as f:
-    workspace_id = f.read().strip()
+# Read workspace and lakehouse IDs
+def read_state_file(filename):
+    path = os.path.join('.state', filename)
+    if not os.path.exists(path):
+        print(f"State file not found: {filename}")
+        sys.exit(1)
+    with open(path, "r") as f:
+        return f.read().strip()
 
-# Step 1: OAuth2 Token Request
-fabric_scope = "https://api.fabric.microsoft.com/.default"
+workspace_id = read_state_file("workspace_id.txt")
+
+# Read first lakehouse ID from .state/lakehouse_ids.txt
+lakehouse_ids_path = os.path.join('.state', 'lakehouse_ids.txt')
+if not os.path.exists(lakehouse_ids_path):
+    print(f"Lakehouse IDs file not found: {lakehouse_ids_path}")
+    sys.exit(1)
+
+with open(lakehouse_ids_path, "r") as f:
+    lakehouse_ids = [line.strip() for line in f if line.strip()]
+if not lakehouse_ids:
+    print("No lakehouse IDs found in lakehouse_ids.txt")
+    sys.exit(1)
+lakehouse_id = lakehouse_ids[0]  # Use the first Lakehouse ID
+
+# Get access token
 token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
-fabric_token_data = {
+fabric_scope = "https://api.fabric.microsoft.com/.default"
+token_data = {
     "grant_type": "client_credentials",
     "client_id": client_id,
     "client_secret": client_secret,
     "scope": fabric_scope
 }
-fabric_token_response = requests.post(token_url, data=fabric_token_data)
-fabric_token_response.raise_for_status()
-fabric_access_token = fabric_token_response.json()["access_token"]
+token_resp = requests.post(token_url, data=token_data)
+token_resp.raise_for_status()
+access_token = token_resp.json()["access_token"]
 
 headers = {
-    "Authorization": f"Bearer {fabric_access_token}",
+    "Authorization": f"Bearer {access_token}",
     "Content-Type": "application/json"
 }
 
-# Step 2: Create Lakehouses
-lakehouse_names = ["BenchmarkLakehouse", "DataSourceLakehouse"]
-lakehouse_ids = []
-lakehouse_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/lakehouses"
+# Prepare notebook file
+notebook_path = "notebooks/generate_data.ipynb"
+if not os.path.exists(notebook_path):
+    print(f"Notebook file not found: {notebook_path}")
+    sys.exit(1)
 
-for name in lakehouse_names:
-    payload = {
-        "displayName": name,
-        "description": f"Lakehouse for {name}"
-    }
-    response = requests.post(lakehouse_url, headers=headers, json=payload)
-    if response.status_code == 201:
-        lakehouse_id = response.json()["id"]
-        print(f"{name} created. ID: {lakehouse_id}")
-        lakehouse_ids.append(lakehouse_id)
-    elif response.status_code == 409:
-        print(f"{name} already exists. Proceeding.")
-        # Optionally: fetch lakehouse ID here if needed
-    else:
-        print(f"Error creating {name}: {response.text}")
-        sys.exit(1)
+with open(notebook_path, "rb") as f:
+    notebook_bytes = f.read()
+notebook_base64 = base64.b64encode(notebook_bytes).decode("utf-8")
 
-# Step 3: Create Warehouse
-warehouse_name = "BenchmarkWarehouse"
-warehouse_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/warehouses"
-warehouse_payload = {
-    "displayName": warehouse_name,
-    "description": "Warehouse for benchmarking copy and shortcut scenarios"
+# Create the payload for /items
+payload = {
+    "displayName": "1.GenerateData",
+    "type": "Notebook",
+    "definition": {
+        "format": "ipynb",
+        "parts": [
+            {
+                "path": "generate_data.ipynb",
+                "payload": notebook_base64,
+                "payloadType": "InlineBase64"
+            }
+        ]
+    },
+    "dataSources": [
+        {
+            "id": lakehouse_id,
+            "type": "Lakehouse"
+        }
+    ]
 }
-warehouse_response = requests.post(warehouse_url, headers=headers, json=warehouse_payload)
 
-print(f"Warehouse creation status code: {warehouse_response.status_code}")
-print(f"Warehouse creation response text: {warehouse_response.text}")
-
-warehouse_id = None
-if warehouse_response.status_code == 201:
-    warehouse_id = warehouse_response.json()["id"]
-    print(f"{warehouse_name} created. ID: {warehouse_id}")
-elif warehouse_response.status_code == 202:
-    print(f"{warehouse_name} creation accepted (async). Polling for completion...")
-    # Poll for warehouse existence
-    poll_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/warehouses"
-    max_attempts = 12  # 12 x 5s = 1 minute
-    for attempt in range(max_attempts):
-        time.sleep(5)
-        poll_response = requests.get(poll_url, headers=headers)
-        if poll_response.status_code == 200:
-            warehouses = poll_response.json().get("value", [])
-            for wh in warehouses:
-                if wh.get("displayName") == warehouse_name:
-                    warehouse_id = wh.get("id")
-                    print(f"{warehouse_name} is now available. ID: {warehouse_id}")
-                    break
-        if warehouse_id:
-            break
-        print(f"Attempt {attempt+1}/{max_attempts}: {warehouse_name} not available yet.")
-    if not warehouse_id:
-        print(f"Error: {warehouse_name} was not found after polling.")
-        sys.exit(1)
-elif warehouse_response.status_code == 409:
-    print(f"{warehouse_name} already exists. Proceeding.")
-    # Optionally: fetch warehouse ID here if needed
-else:
-    print(f"Error creating {warehouse_name}: {warehouse_response.text}")
-    sys.exit(1)
-
-# Step 4: Save IDs to state files
-os.makedirs('.state', exist_ok=True)
-with open('.state/lakehouse_ids.txt', 'w') as f:
-    for lakehouse_id in lakehouse_ids:
-        f.write(f"{lakehouse_id}\n")
-print("Lakehouse IDs saved to .state/lakehouse_ids.txt")
-
-if warehouse_id:
-    with open('.state/warehouse_id.txt', 'w') as f:
-        f.write(warehouse_id)
-    print("Warehouse ID saved to .state/warehouse_id.txt")
-else:
-    print("Warehouse ID was not obtained.")
-    sys.exit(1)
+notebook_api_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/items"
+response = requests.post(notebook_api_url, headers=headers, json=payload)
+print("Status:", response.status_code)
+print("Response:", response.text)
