@@ -4,12 +4,7 @@ import json
 import base64
 import requests
 
-# Secrets from environment
-tenant_id = os.environ.get("TENANT_ID")
-client_id = os.environ.get("CLIENT_ID")
-client_secret = os.environ.get("CLIENT_SECRET")
-
-# Helper to read state file contents
+# Secrets from environment or .state files
 def read_state_file(filename):
     path = os.path.join('.state', filename)
     if not os.path.exists(path):
@@ -18,33 +13,72 @@ def read_state_file(filename):
     with open(path, "r") as f:
         return f.read().strip()
 
+# Load secrets and IDs
+tenant_id = os.environ.get("TENANT_ID")
+client_id = os.environ.get("CLIENT_ID")
+client_secret = os.environ.get("CLIENT_SECRET")
 workspace_id = read_state_file("workspace_id.txt")
 
-print(f"[DEBUG] Using workspace_id for data source: {workspace_id}")  # <-- Debug line added
-
-# Read first lakehouse ID from .state/lakehouse_ids.txt
 lakehouse_ids_path = os.path.join('.state', 'lakehouse_ids.txt')
 if not os.path.exists(lakehouse_ids_path):
     print(f"Lakehouse IDs file not found: {lakehouse_ids_path}")
     sys.exit(1)
-
 with open(lakehouse_ids_path, "r") as f:
     lakehouse_ids = [line.strip() for line in f if line.strip()]
-if not lakehouse_ids:
-    print("No lakehouse IDs found in lakehouse_ids.txt")
+if not lakehouse_ids or len(lakehouse_ids) < 2:
+    print("Insufficient Lakehouse IDs found in lakehouse_ids.txt")
     sys.exit(1)
-lakehouse_id = lakehouse_ids[1]  # Use the second Lakehouse ID, base 0
+lakehouse_id = lakehouse_ids[1]  # DataSourceLakehouse (second entry)
+lakehouse_name = "DataSourceLakehouse" # Update if your lakehouse name is different
 
-print(f"[DEBUG] Using lakehouse_id for data source: {lakehouse_id}")  # <-- Debug line added
+print(f"[DEBUG] Using workspace_id: {workspace_id}")
+print(f"[DEBUG] Using lakehouse_id for data source: {lakehouse_id}")
+print(f"[DEBUG] Lakehouse name: {lakehouse_name}")
+
+# Notebook info
+notebook_display_name = "1.GenerateData"
+notebook_path = "notebooks/generate_data.ipynb"
+platform_path = ".platform"
+
+if not os.path.exists(notebook_path):
+    print(f"Notebook file not found: {notebook_path}")
+    sys.exit(1)
+
+# Create .platform metadata file
+platform_metadata = f"""# Fabric notebook source
+# METADATA ********************
+# META {{
+# META   "kernel_info": {{
+# META     "name": "synapse_pyspark"
+# META   }},
+# META   "dependencies": {{
+# META     "lakehouse": {{
+# META       "default_lakehouse": "{lakehouse_id}",
+# META       "default_lakehouse_name": "{lakehouse_name}",
+# META       "default_lakehouse_workspace_id": "{workspace_id}"
+# META     }}
+# META   }}
+# META }}
+"""
+
+with open(platform_path, "w", encoding="utf-8") as f:
+    f.write(platform_metadata)
+
+# Helper to base64 encode files
+def encode_file(path):
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
+platform_encoded = encode_file(platform_path)
+ipynb_encoded = encode_file(notebook_path)
 
 # Get Fabric access token
 token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
-fabric_scope = "https://api.fabric.microsoft.com/.default"
 token_data = {
     "grant_type": "client_credentials",
     "client_id": client_id,
     "client_secret": client_secret,
-    "scope": fabric_scope
+    "scope": "https://api.fabric.microsoft.com/.default"
 }
 token_resp = requests.post(token_url, data=token_data)
 token_resp.raise_for_status()
@@ -55,69 +89,48 @@ headers = {
     "Content-Type": "application/json"
 }
 
-# Prepare notebook file
-notebook_path = "notebooks/generate_data.ipynb"
-if not os.path.exists(notebook_path):
-    print(f"Notebook file not found: {notebook_path}")
-    sys.exit(1)
-
-with open(notebook_path, "rb") as f:
-    notebook_bytes = f.read()
-notebook_base64 = base64.b64encode(notebook_bytes).decode("utf-8")
-
-# Create the payload for /items, with Lakehouse as data source
+# Compose notebook upload payload with .platform metadata
 payload = {
-    "displayName": "1.GenerateData",
+    "displayName": notebook_display_name,
     "type": "Notebook",
     "definition": {
-        "format": "ipynb",
         "parts": [
             {
+                "path": ".platform",
+                "payload": platform_encoded,
+                "payloadType": "InlineBase64"
+            },
+            {
                 "path": "generate_data.ipynb",
-                "payload": notebook_base64,
+                "payload": ipynb_encoded,
                 "payloadType": "InlineBase64"
             }
         ]
-    },
-    "defaultLakehouse": {
-        "name": "DataSourceLakehouse",
-        "id": lakehouse_id,
-        "workspaceId": workspace_id
-    },
-    "dataSources": [
-        {
-            "id": lakehouse_id,
-            "type": "Lakehouse"
-        }
-    ]
+    }
 }
 
-notebook_api_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/items"
-response = requests.post(notebook_api_url, headers=headers, json=payload)
+upload_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks"
+response = requests.post(upload_url, headers=headers, data=json.dumps(payload))
 print("Status:", response.status_code)
 print("Response:", response.text)
 
-# Populate .state/notebook_ids.txt if notebook was created
+# Populate .state/notebook_ids.txt artifact if notebook was created
 notebook_ids_path = os.path.join('.state', 'notebook_ids.txt')
-if response.status_code in (200, 201):
-    try:
+try:
+    if response.status_code in (200, 201):
         notebook_id = response.json()["id"]
         with open(notebook_ids_path, "w") as f:
             f.write(f"{notebook_id}\n")
         print(f"Notebook ID saved to {notebook_ids_path}")
-    except Exception as e:
-        print(f"Could not extract notebook ID from response: {e}")
-elif response.status_code == 202:
-    # Try to extract notebook ID if present, otherwise note async status
-    try:
+    elif response.status_code == 202:
         notebook_id = response.json().get("id")
         if notebook_id:
             with open(notebook_ids_path, "w") as f:
                 f.write(f"{notebook_id}\n")
             print(f"Notebook ID saved to {notebook_ids_path}")
         else:
-            print(f"Notebook creation is asynchronous (202). Notebook ID not available yet.")
-    except Exception as e:
-        print(f"Could not extract notebook ID (202 async response): {e}")
-else:
-    print(f"Notebook was not created. No ID saved to {notebook_ids_path}.")
+            print("Notebook creation is asynchronous (202). Notebook ID not available yet.")
+    else:
+        print("Notebook was not created. No ID saved to .state/notebook_ids.txt.")
+except Exception as e:
+    print(f"Could not extract notebook ID from response: {e}")
