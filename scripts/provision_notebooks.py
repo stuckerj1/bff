@@ -12,7 +12,6 @@ if not all([tenant_id, client_id, client_secret]):
     print("Missing secrets: TENANT_ID, CLIENT_ID, CLIENT_SECRET must be set")
     sys.exit(1)
 
-# Read IDs from state files
 def read_id(filename):
     path = os.path.join('.state', filename)
     if not os.path.exists(path):
@@ -47,7 +46,6 @@ headers = {
     "Content-Type": "application/json"
 }
 
-# Define notebooks to create, with file paths (snake case)
 notebooks_to_create = [
     {
         "displayName": "1.GenerateData",
@@ -75,7 +73,6 @@ notebook_ids = []
 notebook_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks"
 
 for notebook in notebooks_to_create:
-    # Read notebook content from file as JSON object
     ipynb_path = notebook["file"]
     if not os.path.exists(ipynb_path):
         print(f"Notebook file not found: {ipynb_path}")
@@ -83,10 +80,23 @@ for notebook in notebooks_to_create:
     with open(ipynb_path, "r", encoding="utf-8") as f:
         ipynb_json = json.load(f)
 
-    # Transform: rename 'cells' -> 'parts' for Fabric API
-    fabric_definition = ipynb_json.copy()
-    if "cells" in fabric_definition:
-        fabric_definition["parts"] = fabric_definition.pop("cells")
+    # Transform each cell into a Fabric part
+    parts = []
+    for idx, cell in enumerate(ipynb_json.get("cells", [])):
+        part = {
+            "payloadType": "NotebookCell",
+            "Path": f"/content/cells/{idx}",
+            "Payload": cell
+        }
+        parts.append(part)
+
+    # Optionally include notebook-level metadata
+    fabric_definition = {
+        "parts": parts,
+        "metadata": ipynb_json.get("metadata", {}),
+        "nbformat": ipynb_json.get("nbformat", 4),
+        "nbformat_minor": ipynb_json.get("nbformat_minor", 0)
+    }
 
     payload = {
         "displayName": notebook["displayName"],
@@ -103,18 +113,15 @@ for notebook in notebooks_to_create:
         notebook_ids.append(notebook_id)
     elif response.status_code == 409:
         print(f"Notebook '{notebook['displayName']}' already exists. Skipping.")
-        # Optionally: fetch notebook ID here if needed
     else:
         print(f"Error creating notebook '{notebook['displayName']}': {response.text}")
         sys.exit(1)
 
-# Write notebook IDs to state file
 os.makedirs('.state', exist_ok=True)
 with open('.state/notebook_ids.txt', 'w') as f:
     for notebook_id in notebook_ids:
         f.write(f"{notebook_id}\n")
 
-# Optionally log metadata
 metadata = {
     "workspace_id": workspace_id,
     "lakehouse_ids": lakehouse_ids,
