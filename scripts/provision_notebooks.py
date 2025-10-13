@@ -52,22 +52,22 @@ notebooks_to_create = [
     {
         "displayName": "1.GenerateData",
         "description": "Notebook for synthetic data generation",
-        "file": "bff/notebooks/generate_data.ipynb",
+        "file": "notebooks/generate_data.ipynb",
     },
     {
         "displayName": "2.IngestData",
         "description": "Notebook for ingesting data into lakehouse/warehouse",
-        "file": "bff/notebooks/ingest_data.ipynb",
+        "file": "notebooks/ingest_data.ipynb",
     },
     {
         "displayName": "3.ApplyUpdates",
         "description": "Notebook for applying incremental updates",
-        "file": "bff/notebooks/apply_updates.ipynb",
+        "file": "notebooks/apply_updates.ipynb",
     },
     {
         "displayName": "4.RunQueries",
         "description": "Notebook for running benchmark queries",
-        "file": "bff/notebooks/run_queries.ipynb",
+        "file": "notebooks/run_queries.ipynb",
     }
 ]
 
