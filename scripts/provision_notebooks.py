@@ -7,6 +7,7 @@ import requests
 notebook_display_name = "1.GenerateData"
 notebook_path = "notebooks/generate_data.ipynb"
 lakehouse_name = "DataSourceLakehouse"
+workspace_name = "FabricBenchmarking"
 platform_py_path = "platform_metadata.py"
 
 # === AUTHENTICATION ===
