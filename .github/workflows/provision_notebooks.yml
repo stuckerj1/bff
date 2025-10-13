@@ -1,0 +1,50 @@
+name: Provision Notebooks
+
+on:
+  workflow_dispatch:
+
+jobs:
+  provision-notebooks:
+    runs-on: ubuntu-latest
+    env:
+      TENANT_ID: ${{ secrets.TENANT_ID }}
+      CLIENT_ID: ${{ secrets.CLIENT_ID }}
+      CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download workspace ID artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: workspace-id
+          path: .state/
+
+      - name: Download lakehouse IDs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lakehouse-ids
+          path: .state/
+
+      - name: Download warehouse ID artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: warehouse-id
+          path: .state/
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install requirements
+        run: pip install -r requirements.txt
+
+      - name: Provision Notebooks
+        run: python scripts/provision_notebooks.py
+
+      - name: Upload notebook IDs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: notebook-ids
+          path: .state/notebook_ids.txt
