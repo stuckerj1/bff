@@ -4,7 +4,7 @@ import json
 import base64
 import requests
 
-# Secrets from environment or .state files
+# Helper to read state file contents
 def read_state_file(filename):
     path = os.path.join('.state', filename)
     if not os.path.exists(path):
@@ -44,22 +44,23 @@ if not os.path.exists(notebook_path):
     print(f"Notebook file not found: {notebook_path}")
     sys.exit(1)
 
-# Create .platform metadata file
-platform_metadata = f"""# Fabric notebook source
-# METADATA ********************
-# META {{
-# META   "kernel_info": {{
-# META     "name": "synapse_pyspark"
-# META   }},
-# META   "dependencies": {{
-# META     "lakehouse": {{
-# META       "default_lakehouse": "{lakehouse_id}",
-# META       "default_lakehouse_name": "{lakehouse_name}",
-# META       "default_lakehouse_workspace_id": "{workspace_id}"
-# META     }}
-# META   }}
-# META }}
-"""
+# Create .platform metadata file (correct JSON structure for Fabric)
+platform_metadata = (
+    "# Fabric notebook source\n"
+    "# METADATA ********************\n"
+    "# META {\n"
+    "# META   \"kernel_info\": {\n"
+    "# META     \"name\": \"synapse_pyspark\"\n"
+    "# META   },\n"
+    "# META   \"dependencies\": {\n"
+    "# META     \"lakehouse\": {\n"
+    "# META       \"default_lakehouse\": \"" + lakehouse_id + "\",\n"
+    "# META       \"default_lakehouse_name\": \"" + lakehouse_name + "\",\n"
+    "# META       \"default_lakehouse_workspace_id\": \"" + workspace_id + "\"\n"
+    "# META     }\n"
+    "# META   }\n"
+    "# META }\n"
+)
 
 with open(platform_path, "w", encoding="utf-8") as f:
     f.write(platform_metadata)
