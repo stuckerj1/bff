@@ -56,25 +56,16 @@ for notebook in notebooks_to_create:
         print(f"Notebook file not found: {ipynb_path}")
         sys.exit(1)
     with open(ipynb_path, "r", encoding="utf-8") as f:
-        notebook_str = f.read()  # STRING!
-
-    parts = [{
-        "payloadType": "NotebookFile",
-        "Path": "/content/notebook.ipynb",
-        "Payload": notebook_str
-    }]
-
-    fabric_definition = {
-        "parts": parts
-    }
+        ipynb_json = json.load(f)  # load as JSON
 
     payload = {
         "createItemRequest": {
             "displayName": notebook["displayName"],
             "description": notebook["description"]
         },
-        "definition": fabric_definition
+        "definition": ipynb_json
     }
+
     response = requests.post(notebook_url, headers=headers, json=payload)
     print(f"Uploading notebook '{notebook['displayName']}' from {ipynb_path}...")
     print("Status:", response.status_code)
