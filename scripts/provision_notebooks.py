@@ -4,23 +4,24 @@ import json
 import base64
 import requests
 
-# Load secrets and workspace ID
+# Load secrets
 tenant_id = os.environ.get("TENANT_ID")
 client_id = os.environ.get("CLIENT_ID")
 client_secret = os.environ.get("CLIENT_SECRET")
 
-# Read workspace ID from artifact (as provision_workspace.py would have created)
-def read_workspace_id():
-    state_file = '.state/workspace_id.txt'
-    if not os.path.exists(state_file):
-        print(f"Workspace ID file not found: {state_file}")
+# Read workspace and lakehouse IDs
+def read_state_file(filename):
+    path = os.path.join('.state', filename)
+    if not os.path.exists(path):
+        print(f"State file not found: {filename}")
         sys.exit(1)
-    with open(state_file, "r") as f:
+    with open(path, "r") as f:
         return f.read().strip()
 
-workspace_id = read_workspace_id()
+workspace_id = read_state_file("workspace_id.txt")
+lakehouse_id = read_state_file("datasource_lakehouse_id.txt")  # Lakehouse ID
 
-# Get Fabric access token
+# Get access token
 token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
 fabric_scope = "https://api.fabric.microsoft.com/.default"
 token_data = {
@@ -38,7 +39,7 @@ headers = {
     "Content-Type": "application/json"
 }
 
-# Prepare the notebook file
+# Prepare notebook file
 notebook_path = "notebooks/generate_data.ipynb"
 if not os.path.exists(notebook_path):
     print(f"Notebook file not found: {notebook_path}")
@@ -61,10 +62,15 @@ payload = {
                 "payloadType": "InlineBase64"
             }
         ]
-    }
+    },
+    "dataSources": [
+        {
+            "id": lakehouse_id,
+            "type": "Lakehouse"
+        }
+    ]
 }
 
-# POST to Fabric API
 notebook_api_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/items"
 response = requests.post(notebook_api_url, headers=headers, json=payload)
 print("Status:", response.status_code)
