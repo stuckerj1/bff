@@ -19,7 +19,19 @@ def read_state_file(filename):
         return f.read().strip()
 
 workspace_id = read_state_file("workspace_id.txt")
-lakehouse_id = read_state_file("datasource_lakehouse_id.txt")  # Lakehouse ID
+
+# Read first lakehouse ID from .state/lakehouse_ids.txt
+lakehouse_ids_path = os.path.join('.state', 'lakehouse_ids.txt')
+if not os.path.exists(lakehouse_ids_path):
+    print(f"Lakehouse IDs file not found: {lakehouse_ids_path}")
+    sys.exit(1)
+
+with open(lakehouse_ids_path, "r") as f:
+    lakehouse_ids = [line.strip() for line in f if line.strip()]
+if not lakehouse_ids:
+    print("No lakehouse IDs found in lakehouse_ids.txt")
+    sys.exit(1)
+lakehouse_id = lakehouse_ids[0]  # Use the first Lakehouse ID
 
 # Get access token
 token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
