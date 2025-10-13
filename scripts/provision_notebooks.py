@@ -58,8 +58,16 @@ for notebook in notebooks_to_create:
     with open(ipynb_path, "r", encoding="utf-8") as f:
         ipynb_json = json.load(f)
 
-    # Move 'cells' to 'parts', ensure no nulls
-    parts = [cell for cell in ipynb_json.get("cells", []) if cell is not None]
+    # Transform each cell into a Fabric part
+    parts = []
+    for idx, cell in enumerate(ipynb_json.get("cells", [])):
+        part = {
+            "payloadType": "NotebookCell",
+            "Path": f"/content/cells/{idx}",
+            "Payload": cell
+        }
+        parts.append(part)
+
     fabric_definition = ipynb_json.copy()
     fabric_definition.pop("cells", None)
     fabric_definition["parts"] = parts
