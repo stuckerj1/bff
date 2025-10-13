@@ -77,6 +77,11 @@ payload = {
             }
         ]
     },
+    "defaultLakehouse": {
+        "name": "<name of the lakehouse>",
+        "id": lakehouse_id,
+        "workspaceId": workspace_id
+    },
     "dataSources": [
         {
             "id": lakehouse_id,
@@ -89,3 +94,28 @@ notebook_api_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_i
 response = requests.post(notebook_api_url, headers=headers, json=payload)
 print("Status:", response.status_code)
 print("Response:", response.text)
+
+# Populate .state/notebook_ids.txt if notebook was created
+notebook_ids_path = os.path.join('.state', 'notebook_ids.txt')
+if response.status_code in (200, 201):
+    try:
+        notebook_id = response.json()["id"]
+        with open(notebook_ids_path, "w") as f:
+            f.write(f"{notebook_id}\n")
+        print(f"Notebook ID saved to {notebook_ids_path}")
+    except Exception as e:
+        print(f"Could not extract notebook ID from response: {e}")
+elif response.status_code == 202:
+    # Try to extract notebook ID if present, otherwise note async status
+    try:
+        notebook_id = response.json().get("id")
+        if notebook_id:
+            with open(notebook_ids_path, "w") as f:
+                f.write(f"{notebook_id}\n")
+            print(f"Notebook ID saved to {notebook_ids_path}")
+        else:
+            print(f"Notebook creation is asynchronous (202). Notebook ID not available yet.")
+    except Exception as e:
+        print(f"Could not extract notebook ID (202 async response): {e}")
+else:
+    print(f"Notebook was not created. No ID saved to {notebook_ids_path}.")
