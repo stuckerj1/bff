@@ -1,6 +1,7 @@
 import os
 import json
 import base64
+import sys
 import requests
 
 # === CONFIGURATION ===
@@ -55,22 +56,22 @@ print(f"[DEBUG] Using lakehouse_id for data source: {lakehouse_id}")
 print(f"[DEBUG] Lakehouse name: {lakehouse_name}")
 
 # === GENERATE .py METADATA FILE ===
-platform_metadata = f"""# Fabric notebook source
-# METADATA ********************
-# META {{
-# META   "kernel_info": {{
-# META     "name": "synapse_pyspark"
-# META   }},
-# META   "dependencies": {{
-# META     "lakehouse": {{
-# META       "default_lakehouse": "{lakehouse_id}",
-# META       "default_lakehouse_name": "{lakehouse_name}",
-# META       "default_lakehouse_workspace_id": "{workspace_id}"
-# META     }}
-# META   }}
-# META }}
-print("Platform metadata loaded")
-"""
+platform_metadata = (
+    "# Fabric notebook source\n"
+    "# METADATA ********************\n"
+    "# META {\n"
+    "# META   \"kernel_info\": {\n"
+    "# META     \"name\": \"synapse_pyspark\"\n"
+    "# META   },\n"
+    "# META   \"dependencies\": {\n"
+    "# META     \"lakehouse\": {\n"
+    "# META       \"default_lakehouse\": \"" + lakehouse_id + "\",\n"
+    "# META       \"default_lakehouse_name\": \"" + lakehouse_name + "\",\n"
+    "# META       \"default_lakehouse_workspace_id\": \"" + workspace_id + "\"\n"
+    "# META     }\n"
+    "# META   }\n"
+    "# META }\n"
+)
 with open(platform_py_path, "w", encoding="utf-8") as f:
     f.write(platform_metadata)
 print("----- platform_metadata.py contents -----")
