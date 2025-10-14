@@ -29,7 +29,14 @@ headers = {
 get_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks/{notebook_id}"
 resp = requests.get(get_url, headers=headers)
 resp.raise_for_status()
-parts = resp.json()["definition"]["parts"]
+print("Raw API response:")
+print(resp.text)
+# Then try to parse
+data = resp.json()
+if "definition" not in data:
+    print("No 'definition' field found in response.")
+    exit(1)
+parts = data["definition"]["parts"]
 
 # === FIND & DECODE .platform PART ===
 for part in parts:
