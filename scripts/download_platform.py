@@ -7,7 +7,7 @@ tenant_id = os.environ["TENANT_ID"]
 client_id = os.environ["CLIENT_ID"]
 client_secret = os.environ["CLIENT_SECRET"]
 workspace_id = "8bd0a1d4-ac54-4daf-b936-43c5c037b0d5"
-notebook_id = "65deb31c-0971-452e-b1e9-7b4cd3e3e989"
+notebook_id = "b8783bc2-0296-4cfb-a25f-f596844f9b3b"
 
 # === AUTHENTICATION ===
 token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
