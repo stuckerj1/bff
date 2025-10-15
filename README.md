@@ -92,9 +92,8 @@ Troubleshooting Steps If Needed:
 
 - [ ] Confirm DataSourceLakehouse folder structure and data:  
   - `base/` → for initial datasets  
-  - `updates/` → for batch update slices  
-  - `cdc/` → for CDC merge slices  
-  - Folder creation handled via notebook logic or post-creation script
+  - `updates/` → for batch & CDC slices  
+  - Folder creation handled via 1.GenerateData notebook logic 
 
 - [ ] Semantic model connected to Delta tables
 
