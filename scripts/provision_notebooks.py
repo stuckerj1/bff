@@ -3,6 +3,7 @@ import json
 import base64
 import sys
 import requests
+import time
 
 # === CONFIGURATION ===
 notebook_display_name = "1.GenerateData"
@@ -80,34 +81,47 @@ upload_resp = requests.post(upload_url, headers=headers, data=json.dumps(payload
 print("Status:", upload_resp.status_code)
 print("Response:", upload_resp.text)
 
-# === Save Notebook ID if created ===
 notebook_ids_path = os.path.join('.state', 'notebook_ids.txt')
 notebook_id_saved = False
 notebook_id = None
-try:
-    if upload_resp.status_code in (200, 201):
-        notebook_id = upload_resp.json()["id"]
+
+if upload_resp.status_code in (200, 201):
+    notebook_id = upload_resp.json()["id"]
+    with open(notebook_ids_path, "w") as f:
+        f.write(f"{notebook_id}\n")
+    print(f"Notebook ID saved to {notebook_ids_path}")
+    notebook_id_saved = True
+elif upload_resp.status_code == 202:
+    # Poll for notebook creation
+    print("Notebook creation is asynchronous. Waiting for notebook to appear in workspace...")
+    MAX_ATTEMPTS = 20
+    SLEEP_SECONDS = 10
+    attempts = 0
+    while attempts < MAX_ATTEMPTS and not notebook_id:
+        time.sleep(SLEEP_SECONDS)
+        print(f"Polling attempt {attempts+1}...")
+        nb_resp = requests.get(f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks", headers=headers)
+        nb_resp.raise_for_status()
+        notebooks = nb_resp.json().get("value", [])
+        for nb in notebooks:
+            if nb.get("displayName") == notebook_display_name:
+                notebook_id = nb.get("id")
+                break
+        attempts += 1
+    if notebook_id:
         with open(notebook_ids_path, "w") as f:
             f.write(f"{notebook_id}\n")
-        print(f"Notebook ID saved to {notebook_ids_path}")
+        print(f"Notebook ID (async) saved to {notebook_ids_path}")
         notebook_id_saved = True
-    elif upload_resp.status_code == 202:
-        notebook_id = upload_resp.json().get("id")
-        if notebook_id:
-            with open(notebook_ids_path, "w") as f:
-                f.write(f"{notebook_id}\n")
-            print(f"Notebook ID saved to {notebook_ids_path}")
-            notebook_id_saved = True
-        else:
-            print("Notebook creation is asynchronous (202). Notebook ID not available yet.")
     else:
-        print("Notebook was not created. No ID saved to .state/notebook_ids.txt.")
-except Exception as e:
-    print(f"Could not extract notebook ID from response: {e}")
+        print("ERROR: Notebook was not provisioned after max attempts.")
+        sys.exit(1)
+else:
+    print("Notebook was not created. No ID saved to .state/notebook_ids.txt.")
 
 if not notebook_id_saved or not notebook_id:
     print("ERROR: Notebook provisioning failed. See above for details.")
-    sys.exit(1)  # Explicit failure for CI
+    sys.exit(1)
 
 # === UPDATE DEFAULT LAKEHOUSE FOR THE NOTEBOOK ===
 print(f"Updating default lakehouse for notebook {notebook_id} ...")
