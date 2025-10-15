@@ -124,6 +124,25 @@ if not notebook_id_saved or not notebook_id:
     print("ERROR: Notebook provisioning failed. See above for details.")
     sys.exit(1)
 
+# === Poll for notebook to appear in /notebooks endpoint ===
+attempts = 0
+found_in_notebooks = False
+while attempts < MAX_ATTEMPTS and not found_in_notebooks:
+    time.sleep(SLEEP_SECONDS)
+    print(f"Polling for notebook in /notebooks (attempt {attempts+1})...", flush=True)
+    nb_resp = requests.get(f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks", headers=headers)
+    nb_resp.raise_for_status()
+    notebooks = nb_resp.json().get("value", [])
+    for nb in notebooks:
+        if nb.get("id") == notebook_id:
+            found_in_notebooks = True
+            break
+    attempts += 1
+
+if not found_in_notebooks:
+    print("ERROR: Notebook did not appear in /notebooks endpoint after max attempts.", flush=True)
+    sys.exit(1)
+
 # === UPDATE DEFAULT LAKEHOUSE FOR THE NOTEBOOK ===
 print(f"Updating default lakehouse for notebook {notebook_id} ...")
 update_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks/{notebook_id}/NotebookUtils.update_default_lakehouse"
