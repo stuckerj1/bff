@@ -4,8 +4,10 @@ import base64
 import sys
 import requests
 import time
+import logging
 
 # === CONFIGURATION ===
+logging.basicConfig(level=logging.INFO)  
 notebook_display_name = "1.GenerateData"
 notebook_path = "notebooks/generate_data.ipynb"
 lakehouse_name = "DataSourceLakehouse"
@@ -175,8 +177,8 @@ update_payload = {
 #    "workspaceId": workspace_id
 }
 
-UPDATE_ATTEMPTS = 10
-UPDATE_SLEEP_SECONDS = 10
+UPDATE_ATTEMPTS = 3
+UPDATE_SLEEP_SECONDS = 3
 update_success = False
 
 for attempt in range(UPDATE_ATTEMPTS):
@@ -198,5 +200,8 @@ for attempt in range(UPDATE_ATTEMPTS):
         break
 
 if not update_success:
-    print("ERROR: Failed to update default lakehouse after multiple attempts.", flush=True)
-    sys.exit(1)
+
+    logging.warning(
+        "Failed to update default lakehouse after multiple attempts. "
+        "Please set the default lakehouse for this notebook according to the README."
+    )    
