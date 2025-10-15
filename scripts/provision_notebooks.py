@@ -137,6 +137,9 @@ while attempts < MAX_ATTEMPTS and ready_count < 2:  # Wait for 2 consecutive app
     nb_resp = requests.get(f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks", headers=headers)
     nb_resp.raise_for_status()
     notebooks = nb_resp.json().get("value", [])
+    print(f"Found {len(notebooks)} notebooks:", flush=True)
+    for nb in notebooks:
+        print(f" - {nb.get('id')} : {nb.get('displayName')}", flush=True)
     found = any(nb.get("id") == notebook_id for nb in notebooks)
     if found:
         ready_count += 1
@@ -148,8 +151,9 @@ if ready_count < 2:
     print("ERROR: Notebook did not appear ready in /notebooks endpoint after max attempts.", flush=True)
     sys.exit(1)
 
-# Optional: short sleep to ensure backend is ready
-time.sleep(10)
+# Optional: longer sleep to ensure backend is ready
+print("Pausing to ensure backend is ready.")
+time.sleep(30)
 
 # === UPDATE DEFAULT LAKEHOUSE FOR THE NOTEBOOK ===
 print(f"Updating default lakehouse for notebook {notebook_id} ...", flush=True)
