@@ -24,6 +24,7 @@ flowchart LR
     Ingest_Data --> Update_Data
     Update_Data --> Query_Data
     Query_Data --> Scorecard_Performance
+    Scorecard_Performance --> Profit!
 ```
 *Workflows trigger scripts that provision Fabric resources and upload notebooks automatically.  Notebooks contain logic to ingest, update, query, and analyze performance.*
 
