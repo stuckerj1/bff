@@ -90,7 +90,7 @@ platform_encoded = encode_file(platform_py_path)
 ipynb_encoded = encode_file(notebook_path)
 
 # === UPLOAD NOTEBOOK ===
-upload_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks"
+upload_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/items"
 payload = {
     "displayName": notebook_display_name,
     "type": "Notebook",    
