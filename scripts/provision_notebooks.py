@@ -158,9 +158,13 @@ time.sleep(10)
 # === UPDATE DEFAULT LAKEHOUSE FOR THE NOTEBOOK ===
 print(f"Updating default lakehouse for notebook {notebook_id} ...", flush=True)
 update_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks/{notebook_id}/updateDefinition"
+
+with open(notebook_path, "r", encoding="utf-8") as f:
+    notebook_json_str = f.read()
+
 update_payload = {
     "name": notebook_display_name,
-    "definition": "",  # Only needed if you want to update notebook content
+    "definition": notebook_json_str,  # actual notebook JSON as a string
     "defaultLakehouse": lakehouse_id,
     "defaultLakehouseWorkspace": workspace_id,
     "workspaceId": workspace_id
