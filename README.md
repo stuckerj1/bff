@@ -21,6 +21,7 @@ flowchart LR
     GitHub_Actions --> Fabric_REST_API
     Fabric_REST_API --> Workspace_and_Lakehouse
     Workspace_and_Lakehouse --> Notebooks
+    Generate_Data --> Ingest_Data
     Ingest_Data --> Update_Data
     Update_Data --> Query_Data
     Query_Data --> Scorecard_Performance
@@ -75,16 +76,25 @@ flowchart LR
   - `cdc/` → for CDC merge slices  
   - Folder creation handled via notebook logic or post-creation script
 
-- [ ] Notebooks created for:  
-  - [ ] Data generation  
-  - [ ] Ingestion  
-  - [ ] Updates  
-  - [ ] Query benchmarking  
-  - [ ] Metric capture
+- [ ] Establish Data Connections:
+  - [ ] 1.GenerateData - DataSourceLakehouse  
+  - [ ] 2.IngestData - DataSourceLakehouse & BenchmarkLakehouse
+  - [ ] 3.ApplyUpdates - DataSourceLakehouse & BenchmarkLakehouse
+  - [ ] 4.RunQueries - BenchmarkLakehouse
+  - [ ] 5.VisualizeMetrics - BenchmarkLakehouse
+
+ (Currently a manual process; will refactor to automate this sequence.)
+ 
+- [ ] Run Notebooks in order:  
+  - [ ] 1.GenerateData - Synthetic data generation  
+  - [ ] 2.IngestData - Initial data load 
+  - [ ] 3.ApplyUpdates - Batch or CDC 
+  - [ ] 4.RunQueries - Capture query benchmarking  timings
+  - [ ] 5.VisualizeMetrics - Display metrics from capture
 
 - [ ] Semantic model connected to Delta tables
 
-- [ ] Power BI reports created for scorecard, refresh latency, and query performance
+- [ ] Power BI reports or PySpark charts created for scorecard, refresh latency, and query performance
 
 - [ ] Shortcuts created and validated
 
