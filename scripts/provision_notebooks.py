@@ -11,6 +11,10 @@ notebook_path = "notebooks/generate_data.ipynb"
 lakehouse_name = "DataSourceLakehouse"
 workspace_name = "FabricBenchmarking"
 
+# === POLLING CONFIGURATION ===
+MAX_ATTEMPTS = 20
+SLEEP_SECONDS = 10
+
 # === AUTHENTICATION ===
 tenant_id = os.environ["TENANT_ID"]
 client_id = os.environ["CLIENT_ID"]
@@ -51,9 +55,9 @@ lakehouse_id = next(
 if not lakehouse_id:
     raise Exception(f"Lakehouse '{lakehouse_name}' not found in workspace '{workspace_name}'.")
 
-print(f"[DEBUG] Using workspace_id: {workspace_id}")
-print(f"[DEBUG] Using lakehouse_id for data source: {lakehouse_id}")
-print(f"[DEBUG] Lakehouse name: {lakehouse_name}")
+print(f"[DEBUG] Using workspace_id: {workspace_id}", flush=True)
+print(f"[DEBUG] Using lakehouse_id for data source: {lakehouse_id}", flush=True)
+print(f"[DEBUG] Lakehouse name: {lakehouse_name}", flush=True)
 
 # === BASE64 ENCODE FILES ===
 def encode_file(path):
@@ -78,9 +82,10 @@ payload = {
         ]
     }
 }
+print("Upload payload:", json.dumps(payload, indent=2), flush=True)
 upload_resp = requests.post(upload_url, headers=headers, data=json.dumps(payload))
-print("Status:", upload_resp.status_code)
-print("Response:", upload_resp.text)
+print("Status:", upload_resp.status_code, flush=True)
+print("Response:", upload_resp.text, flush=True)
 
 notebook_ids_path = os.path.join('.state', 'notebook_ids.txt')
 notebook_id_saved = False
@@ -90,61 +95,64 @@ if upload_resp.status_code in (200, 201):
     notebook_id = upload_resp.json()["id"]
     with open(notebook_ids_path, "w") as f:
         f.write(f"{notebook_id}\n")
-    print(f"Notebook ID saved to {notebook_ids_path}")
+    print(f"Notebook ID saved to {notebook_ids_path}", flush=True)
     notebook_id_saved = True
 elif upload_resp.status_code == 202:
-    # Poll for notebook creation
-    print("Notebook creation is asynchronous. Waiting for notebook to appear in workspace...")
-    MAX_ATTEMPTS = 20
-    SLEEP_SECONDS = 10
+    # Poll for notebook creation in /items
+    print("Notebook creation is asynchronous. Waiting for notebook to appear in workspace...", flush=True)
     attempts = 0
     while attempts < MAX_ATTEMPTS and not notebook_id:
         time.sleep(SLEEP_SECONDS)
-        print(f"Polling attempt {attempts+1}...")
-        nb_resp = requests.get(f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks", headers=headers)
-        nb_resp.raise_for_status()
-        notebooks = nb_resp.json().get("value", [])
-        for nb in notebooks:
-            if nb.get("displayName") == notebook_display_name:
-                notebook_id = nb.get("id")
+        print(f"Polling /items attempt {attempts+1}...", flush=True)
+        items_resp = requests.get(f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/items", headers=headers)
+        items_resp.raise_for_status()
+        items = items_resp.json().get("value", [])
+        for item in items:
+            if item.get("displayName") == notebook_display_name and item.get("type") == "Notebook":
+                notebook_id = item.get("id")
                 break
         attempts += 1
     if notebook_id:
         with open(notebook_ids_path, "w") as f:
             f.write(f"{notebook_id}\n")
-        print(f"Notebook ID (async) saved to {notebook_ids_path}")
+        print(f"Notebook ID (async from /items) saved to {notebook_ids_path}", flush=True)
         notebook_id_saved = True
     else:
-        print("ERROR: Notebook was not provisioned after max attempts.")
+        print("ERROR: Notebook was not provisioned after max attempts in /items.", flush=True)
         sys.exit(1)
 else:
-    print("Notebook was not created. No ID saved to .state/notebook_ids.txt.")
+    print("Notebook was not created. No ID saved to .state/notebook_ids.txt.", flush=True)
+    sys.exit(1)
 
 if not notebook_id_saved or not notebook_id:
-    print("ERROR: Notebook provisioning failed. See above for details.")
+    print("ERROR: Notebook provisioning failed. See above for details.", flush=True)
     sys.exit(1)
 
 # === Poll for notebook to appear in /notebooks endpoint ===
 attempts = 0
-found_in_notebooks = False
-while attempts < MAX_ATTEMPTS and not found_in_notebooks:
+ready_count = 0
+while attempts < MAX_ATTEMPTS and ready_count < 2:  # Wait for 2 consecutive appearances
     time.sleep(SLEEP_SECONDS)
     print(f"Polling for notebook in /notebooks (attempt {attempts+1})...", flush=True)
     nb_resp = requests.get(f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks", headers=headers)
     nb_resp.raise_for_status()
     notebooks = nb_resp.json().get("value", [])
-    for nb in notebooks:
-        if nb.get("id") == notebook_id:
-            found_in_notebooks = True
-            break
+    found = any(nb.get("id") == notebook_id for nb in notebooks)
+    if found:
+        ready_count += 1
+    else:
+        ready_count = 0
     attempts += 1
 
-if not found_in_notebooks:
-    print("ERROR: Notebook did not appear in /notebooks endpoint after max attempts.", flush=True)
+if ready_count < 2:
+    print("ERROR: Notebook did not appear ready in /notebooks endpoint after max attempts.", flush=True)
     sys.exit(1)
 
+# Optional: short sleep to ensure backend is ready
+time.sleep(10)
+
 # === UPDATE DEFAULT LAKEHOUSE FOR THE NOTEBOOK ===
-print(f"Updating default lakehouse for notebook {notebook_id} ...")
+print(f"Updating default lakehouse for notebook {notebook_id} ...", flush=True)
 update_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks/{notebook_id}/NotebookUtils.update_default_lakehouse"
 update_payload = {
     "lakehouseId": lakehouse_id,
@@ -152,10 +160,10 @@ update_payload = {
     "workspaceId": workspace_id
 }
 update_resp = requests.post(update_url, headers=headers, json=update_payload)
-print("Lakehouse update status:", update_resp.status_code)
-print("Lakehouse update response:", update_resp.text)
+print("Lakehouse update status:", update_resp.status_code, flush=True)
+print("Lakehouse update response:", update_resp.text, flush=True)
 if update_resp.status_code not in (200, 204):
-    print("ERROR: Failed to update default lakehouse.")
+    print("ERROR: Failed to update default lakehouse.", flush=True)
     sys.exit(1)
 else:
-    print("Successfully updated default lakehouse for notebook.")
+    print("Successfully updated default lakehouse for notebook.", flush=True)
