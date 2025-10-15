@@ -8,6 +8,25 @@ To evaluate ingestion, update, and query performance across different formats, s
 ## 🧩 Repo Structure
 See [`GitHub Repo Structure`](#github-repo-structure-for-benchmarking-framework) section for full layout.
 
+## 🔧 Features
+- Automated Fabric workspace and lakehouse provisioning
+- Notebook upload and configuration via REST API
+- GitHub Actions for fully reproducible runs
+- Secure secret management (no credentials in code)
+- Modular, extensible Python scripts
+
+## 🏗️ Architecture
+```mermaid
+flowchart LR
+    GitHub_Actions --> Fabric_REST_API
+    Fabric_REST_API --> Workspace_and_Lakehouse
+    Workspace_and_Lakehouse --> Notebooks
+    Ingest_Data --> Update_Data
+    Update_Data --> Query_Data
+    Query_Data --> Scorecard_Performance
+```
+*Workflows trigger scripts that provision Fabric resources and upload notebooks automatically.  Notebooks contain logic to ingest, update, query, and analyze performance.*
+
 ---
 
 ## 🛠️ Setup Instructions / Checklist
