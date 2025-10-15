@@ -160,9 +160,10 @@ print(f"Updating default lakehouse for notebook {notebook_id} ...", flush=True)
 update_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks/{notebook_id}/updateDefinition"
 update_payload = {
     "name": notebook_display_name,
-    "definition": "",  # Only needed if you want to update notebook content
+    "content": "",  # Only needed if you want to update notebook content
     "defaultLakehouse": lakehouse_id,
-    "defaultLakehouseWorkspace": workspace_id
+    "defaultLakehouseWorkspace": workspace_id,
+    "workspaceId": workspace_id
 }
 
 UPDATE_ATTEMPTS = 10
