@@ -144,9 +144,9 @@ After simulating external data, the framework supports ingestion into three targ
 
 | Target Type           | Description                                   | Reporting Method         |
 |-----------------------|-----------------------------------------------|-------------------------|
-| Lakehouse (Parquet)   | Parquet files ingested into Fabric Lakehouse  | Python charts/notebooks  |
-| Lakehouse (Delta)     | Delta tables ingested into Fabric Lakehouse   | Power BI reports        |
-| Warehouse             | Ingestion into Fabric Warehouse (SQL tables)  | Power BI reports        |
+| Lakehouse (Parquet)   | Parquet files ingested into BenchmarkLakehouse  | Python charts/notebooks |
+| Lakehouse (Delta)     | Delta tables ingested into BenchmarkLakehouse   | Power BI reports via shortcuts in BenchmarkWarehouse |
+| Warehouse             | Ingestion into BenchmarkWarehouse (SQL tables)  | Power BI reports |
 
 - **Lakehouse (Parquet):** Used for Python-based metric charting and quick analysis.
 - **Lakehouse (Delta) & Warehouse:** Used for Power BI reporting, scorecards, and advanced query performance metrics.
