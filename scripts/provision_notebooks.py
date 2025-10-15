@@ -187,6 +187,9 @@ for attempt in range(UPDATE_ATTEMPTS):
         print("Successfully updated default lakehouse for notebook.", flush=True)
         update_success = True
         break
+    elif update_resp.status_code == 202:
+        print(f"Lakehouse update accepted but still processing (202). Retrying in {UPDATE_SLEEP_SECONDS} seconds...", flush=True)
+        time.sleep(UPDATE_SLEEP_SECONDS)
     elif update_resp.status_code == 404:
         print(f"Notebook not ready for update (404). Retrying in {UPDATE_SLEEP_SECONDS} seconds...", flush=True)
         time.sleep(UPDATE_SLEEP_SECONDS)
