@@ -57,7 +57,7 @@ jobs:
         run: echo "WORKSPACE_ID=$(cat .state/workspace_id.txt)" >> $GITHUB_ENV
 
       - name: Provision Notebooks
-        run: python scripts/provision_notebooks.py
+        run: python -u scripts/provision_notebooks.py
 
       - name: Upload notebook IDs artifact
         uses: actions/upload-artifact@v4
