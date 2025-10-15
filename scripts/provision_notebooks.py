@@ -9,7 +9,6 @@ notebook_display_name = "1.GenerateData"
 notebook_path = "notebooks/generate_data.ipynb"
 lakehouse_name = "DataSourceLakehouse"
 workspace_name = "FabricBenchmarking"
-platform_py_path = "platform.py"
 
 # === AUTHENTICATION ===
 tenant_id = os.environ["TENANT_ID"]
@@ -55,38 +54,11 @@ print(f"[DEBUG] Using workspace_id: {workspace_id}")
 print(f"[DEBUG] Using lakehouse_id for data source: {lakehouse_id}")
 print(f"[DEBUG] Lakehouse name: {lakehouse_name}")
 
-# === GENERATE .py METADATA FILE ===
-platform_metadata = (
-    "# Fabric notebook source\n"
-    "# METADATA ********************\n"
-    "# META {\n"
-    "# META   \"kernel_info\": {\n"
-    "# META     \"name\": \"synapse_pyspark\"\n"
-    "# META   },\n"
-    "# META   \"dependencies\": {\n"
-    "# META     \"lakehouse\": {\n"
-    "# META       \"default_lakehouse\": \"" + lakehouse_id + "\",\n"
-    "# META       \"default_lakehouse_name\": \"" + lakehouse_name + "\",\n"
-    "# META       \"default_lakehouse_workspace_id\": \"" + workspace_id + "\"\n"
-    "# META     }\n"
-    "# META   }\n"
-    "# META }\n"
-    "def __fabric_metadata__(): pass\n"
-)
-
-with open(platform_py_path, "w", encoding="utf-8") as f:
-    f.write(platform_metadata)
-print("----- platform_metadata.py contents -----")
-with open(platform_py_path, "r", encoding="utf-8") as debug_f:
-    print(debug_f.read())
-print("----- end platform_metadata.py -----")
-
 # === BASE64 ENCODE FILES ===
 def encode_file(path):
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
 
-platform_encoded = encode_file(platform_py_path)
 ipynb_encoded = encode_file(notebook_path)
 
 # === UPLOAD NOTEBOOK ===
@@ -96,11 +68,6 @@ payload = {
     "type": "Notebook",    
     "definition": {
         "parts": [
-            {
-                "path": ".platform",
-                "payload": platform_encoded,
-                "payloadType": "InlineBase64"
-            },
             {
                 "path": "generate_data.ipynb",
                 "payload": ipynb_encoded,
