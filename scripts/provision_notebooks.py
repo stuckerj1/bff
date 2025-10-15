@@ -68,6 +68,7 @@ payload = {
     "displayName": notebook_display_name,
     "type": "Notebook",    
     "definition": {
+        "format": "ipynb",
         "parts": [
             {
                 "path": "generate_data.ipynb",
