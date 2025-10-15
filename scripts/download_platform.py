@@ -26,7 +26,7 @@ headers = {
 }
 
 # === GET NOTEBOOK DEFINITION ===
-get_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/items/{notebook_id}/GetDefinition"
+get_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/items/{notebook_id}/GetDefinition?format=ipynb"
 resp = requests.get(get_url, headers=headers)
 resp.raise_for_status()
 print("Raw API response:")
