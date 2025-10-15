@@ -153,7 +153,7 @@ if ready_count < 2:
 
 # Optional: longer sleep to ensure backend is ready
 print("Pausing to ensure backend is ready.")
-time.sleep(30)
+time.sleep(10)
 
 # === UPDATE DEFAULT LAKEHOUSE FOR THE NOTEBOOK ===
 print(f"Updating default lakehouse for notebook {notebook_id} ...", flush=True)
@@ -163,11 +163,26 @@ update_payload = {
     "lakehouseName": lakehouse_name,
     "workspaceId": workspace_id
 }
-update_resp = requests.post(update_url, headers=headers, json=update_payload)
-print("Lakehouse update status:", update_resp.status_code, flush=True)
-print("Lakehouse update response:", update_resp.text, flush=True)
-if update_resp.status_code not in (200, 204):
-    print("ERROR: Failed to update default lakehouse.", flush=True)
+
+UPDATE_ATTEMPTS = 10
+UPDATE_SLEEP_SECONDS = 10
+update_success = False
+
+for attempt in range(UPDATE_ATTEMPTS):
+    update_resp = requests.post(update_url, headers=headers, json=update_payload)
+    print(f"Lakehouse update attempt {attempt+1} status: {update_resp.status_code}", flush=True)
+    print("Lakehouse update response:", update_resp.text, flush=True)
+    if update_resp.status_code in (200, 204):
+        print("Successfully updated default lakehouse for notebook.", flush=True)
+        update_success = True
+        break
+    elif update_resp.status_code == 404:
+        print(f"Notebook not ready for update (404). Retrying in {UPDATE_SLEEP_SECONDS} seconds...", flush=True)
+        time.sleep(UPDATE_SLEEP_SECONDS)
+    else:
+        print("ERROR: Unexpected response during lakehouse update.", flush=True)
+        break
+
+if not update_success:
+    print("ERROR: Failed to update default lakehouse after multiple attempts.", flush=True)
     sys.exit(1)
-else:
-    print("Successfully updated default lakehouse for notebook.", flush=True)
