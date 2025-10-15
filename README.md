@@ -311,25 +311,31 @@ The ingestion module is structured for easy swapping of external sources. To add
 
 ---
 
-### 🐍 Python File Scaffolds
+### 🐍 Python and Jupiter File Scaffolds
 
 #### `provision_workspace.py`
 Creates a Fabric workspace and assigns admin role.
 
-#### `provision_lakehouse.py`
-Creates a Lakehouse inside the workspace.
+#### `provision_lakehouses_warehouse.py`
+Creates DataSourceLakehouse, BenchmarkLakehouse and BenchmarkWarehouse inside the workspace.
 
-#### `generate_data.py`
-Generates synthetic datasets and update slices.
+#### `provision_notebooks.py`
+Creates 5 notebooks from the respective files.
 
-#### `ingest_data.py`
-Handles ingestion logic for full refresh, batch, and CDC.
+#### `generate_data.ipynb` = `1.GenerateData`
+Synthetic data generation.
 
-#### `benchmark_queries.py`
-Executes filter, join, and aggregate queries and captures metrics.
+#### `ingest_data.ipynb` = `2.IngestData`
+Initial data load
 
-#### `scorecard_generator.py`
-Compiles results into a comparative scorecard.
+#### `apply_updates.ipynb` = `3.ApplyUpdates`
+Batch or CDC
+
+#### `run_queries.ipynb` = `4.RunQueries`
+Capture query benchmarking timings
+
+#### `visualize_metrics.ipynb` = `5.VisualizeMetrics`
+Display metrics from capture
 
 ---
 
