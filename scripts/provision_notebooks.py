@@ -83,6 +83,7 @@ print("Response:", upload_resp.text)
 # === Save Notebook ID if created ===
 notebook_ids_path = os.path.join('.state', 'notebook_ids.txt')
 notebook_id_saved = False
+notebook_id = None
 try:
     if upload_resp.status_code in (200, 201):
         notebook_id = upload_resp.json()["id"]
@@ -104,6 +105,23 @@ try:
 except Exception as e:
     print(f"Could not extract notebook ID from response: {e}")
 
-if not notebook_id_saved:
+if not notebook_id_saved or not notebook_id:
     print("ERROR: Notebook provisioning failed. See above for details.")
     sys.exit(1)  # Explicit failure for CI
+
+# === UPDATE DEFAULT LAKEHOUSE FOR THE NOTEBOOK ===
+print(f"Updating default lakehouse for notebook {notebook_id} ...")
+update_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks/{notebook_id}/NotebookUtils.update_default_lakehouse"
+update_payload = {
+    "lakehouseId": lakehouse_id,
+    "lakehouseName": lakehouse_name,
+    "workspaceId": workspace_id
+}
+update_resp = requests.post(update_url, headers=headers, json=update_payload)
+print("Lakehouse update status:", update_resp.status_code)
+print("Lakehouse update response:", update_resp.text)
+if update_resp.status_code not in (200, 204):
+    print("ERROR: Failed to update default lakehouse.")
+    sys.exit(1)
+else:
+    print("Successfully updated default lakehouse for notebook.")
