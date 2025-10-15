@@ -220,18 +220,18 @@ The ingestion module is structured for easy swapping of external sources. To add
 | TC04 | Parquet | Files | 1M | Batch | 5.6s | 120 MB | N/A | N/A | Append + dedup | 
 | TC05 | Parquet | Files | 10K | CDC | 4.2s | 13 MB | N/A | N/A | Merge logic applied | 
 | TC06 | Parquet | Files | 1M | CDC | 6.3s | 122 MB | N/A | N/A | Merge logic applied | 
-| TC07 | Delta | Tables | 10K | Full Refresh | 3.5s | 14 MB | Filter | 1.2s | Overwrite mode | 
-| TC08 | Delta | Tables | 1M | Full Refresh | 6.2s | 130 MB | Aggregate | 2.8s | Overwrite mode | 
-| TC09 | Delta | Tables | 10K | Batch | 4.1s | 14 MB | Join | 1.6s | Append + dedup | 
-| TC10 | Delta | Tables | 1M | Batch | 6.8s | 132 MB | Filter | 2.2s | Append + dedup | 
-| TC11 | Delta | Tables | 10K | CDC | 4.8s | 14 MB | Filter | 1.2s | Merge logic applied | 
-| TC12 | Delta | Tables | 1M | CDC | 7.1s | 135 MB | Aggregate | 3.1s | Merge logic applied | 
-| TC13 | Shortcut to Delta | Tables | 10K | Full Refresh | 2.9s | 0 MB | Filter | 1.1s | Metadata sync delay: 0.3s | 
-| TC14 | Shortcut to Delta | Tables | 1M | Full Refresh | 5.4s | 0 MB | Join | 2.9s | Metadata sync delay: 0.5s | 
-| TC15 | Shortcut to Delta | Tables | 10K | Batch | 3.2s | 0 MB | Aggregate | 1.4s | Append + dedup | 
-| TC16 | Shortcut to Delta | Tables | 1M | Batch | 6.1s | 0 MB | Join | 3.2s | Append + dedup | 
-| TC17 | Shortcut to Delta | Tables | 10K | CDC | 3.9s | 0 MB | Filter | 1.3s | Merge logic applied | 
-| TC18 | Shortcut to Delta | Tables | 1M | CDC | 6.7s | 0 MB | Aggregate | 3.4s | Merge logic applied | 
+| TC07 | Shortcut to Delta | Tables | 10K | Full Refresh | 3.5s | 14 MB | Filter | 1.2s | Overwrite mode | 
+| TC08 | Shortcut to Delta | Tables | 1M | Full Refresh | 6.2s | 130 MB | Aggregate | 2.8s | Overwrite mode | 
+| TC09 | Shortcut to Delta | Tables | 10K | Batch | 4.1s | 14 MB | Join | 1.6s | Append + dedup | 
+| TC10 | Shortcut to Delta | Tables | 1M | Batch | 6.8s | 132 MB | Filter | 2.2s | Append + dedup | 
+| TC11 | Shortcut to Delta | Tables | 10K | CDC | 4.8s | 14 MB | Filter | 1.2s | Merge logic applied | 
+| TC12 | Shortcut to Delta | Tables | 1M | CDC | 7.1s | 135 MB | Aggregate | 3.1s | Merge logic applied | 
+| TC13 | Warehouse | Tables | 10K | Full Refresh | 2.9s | 0 MB | Filter | 1.1s | Metadata sync delay: 0.3s | 
+| TC14 | Warehouse | Tables | 1M | Full Refresh | 5.4s | 0 MB | Join | 2.9s | Metadata sync delay: 0.5s | 
+| TC15 | Warehouse | Tables | 10K | Batch | 3.2s | 0 MB | Aggregate | 1.4s | Append + dedup | 
+| TC16 | Warehouse | Tables | 1M | Batch | 6.1s | 0 MB | Join | 3.2s | Append + dedup | 
+| TC17 | Warehouse | Tables | 10K | CDC | 3.9s | 0 MB | Filter | 1.3s | Merge logic applied | 
+| TC18 | Warehouse | Tables | 1M | CDC | 6.7s | 0 MB | Aggregate | 3.4s | Merge logic applied | 
 
 
 ---
