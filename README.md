@@ -68,15 +68,9 @@ flowchart LR
   - Created using `POST /v1/workspaces/{workspaceId}/lakehouses`  (similar for warehouse)
   - Confirm status code `201` and capture `lakehouse_ids` and `warehouse_id`
 
-- [ ] Run GitHub Actions workflow: `Generate synthetic data in DataSourceLakehouse`
+- [ ] Run GitHub Actions workflow: `Provision Notebooks`
 
-- [ ] Confirm DataSourceLakehouse folder structure and data:  
-  - `base/` → for initial datasets  
-  - `updates/` → for batch update slices  
-  - `cdc/` → for CDC merge slices  
-  - Folder creation handled via notebook logic or post-creation script
-
-- [ ] Establish Data Connections:
+- [ ] In Fabric, establish Data Connections:
   - [ ] 1.GenerateData - DataSourceLakehouse  
   - [ ] 2.IngestData - DataSourceLakehouse & BenchmarkLakehouse
   - [ ] 3.ApplyUpdates - DataSourceLakehouse & BenchmarkLakehouse
@@ -91,6 +85,16 @@ flowchart LR
   - [ ] 3.ApplyUpdates - Batch or CDC 
   - [ ] 4.RunQueries - Capture query benchmarking  timings
   - [ ] 5.VisualizeMetrics - Display metrics from capture
+
+- [ ] Review metrics and gain insights.
+
+Troubleshooting Steps If Needed:
+
+- [ ] Confirm DataSourceLakehouse folder structure and data:  
+  - `base/` → for initial datasets  
+  - `updates/` → for batch update slices  
+  - `cdc/` → for CDC merge slices  
+  - Folder creation handled via notebook logic or post-creation script
 
 - [ ] Semantic model connected to Delta tables
 
