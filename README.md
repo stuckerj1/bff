@@ -215,9 +215,9 @@ The ingestion module is structured for easy swapping of external sources. To add
 | Test Case | Format | Location | Rows | Update Strategy | Ingest Time | Storage Size | Query Type | Query Time | Notes | 
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | 
 | TC01 | Parquet | Files | 10K | Full Refresh | 3.2s | 12 MB | N/A | N/A | No tabular access | 
-| TC02 | Parquet | Files | 1M | Batch | 5.6s | 120 MB | N/A | N/A | Append + dedup | 
-| TC03 | Parquet | Files | 1M | Full Refresh | 5.1s | 118 MB | N/A | N/A | Overwrite mode | 
-| TC04 | Parquet | Files | 10K | Batch | 3.4s | 12 MB | N/A | N/A | Append + dedup | 
+| TC02 | Parquet | Files | 1M | Full Refresh | 5.1s | 118 MB | N/A | N/A | Overwrite mode | 
+| TC03 | Parquet | Files | 10K | Batch | 3.4s | 12 MB | N/A | N/A | Append + dedup | 
+| TC04 | Parquet | Files | 1M | Batch | 5.6s | 120 MB | N/A | N/A | Append + dedup | 
 | TC05 | Parquet | Files | 10K | CDC | 4.2s | 13 MB | N/A | N/A | Merge logic applied | 
 | TC06 | Parquet | Files | 1M | CDC | 6.3s | 122 MB | N/A | N/A | Merge logic applied | 
 | TC07 | Delta | Tables | 10K | Full Refresh | 3.5s | 14 MB | Filter | 1.2s | Overwrite mode | 
