@@ -160,19 +160,19 @@ print(f"Updating default lakehouse for notebook {notebook_id} ...", flush=True)
 update_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks/{notebook_id}/updateDefinition"
 update_payload = {
     "name": notebook_display_name,
-    "definition": {
-        "format": "ipynb",
-        "parts": [
-            {
-                "path": "generate_data.ipynb",
-                "payload": ipynb_encoded,
-                "payloadType": "InlineBase64"
-            }
-        ]
-    },
-    "defaultLakehouse": lakehouse_id,
-    "defaultLakehouseWorkspace": workspace_id,
-    "workspaceId": workspace_id
+#    "definition": {
+#        "format": "ipynb",
+#        "parts": [
+#            {
+#                "path": "generate_data.ipynb",
+#                "payload": ipynb_encoded,
+#                "payloadType": "InlineBase64"
+#            }
+#        ]
+#    },
+    "defaultLakehouse": lakehouse_id #,
+#    "defaultLakehouseWorkspace": workspace_id,
+#    "workspaceId": workspace_id
 }
 
 UPDATE_ATTEMPTS = 10
