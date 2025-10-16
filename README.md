@@ -218,27 +218,24 @@ The ingestion module is structured for easy swapping of external sources. To add
 
 ## 📊 Sample Scorecard Layout
 
-| Test Case | Format | Location | Rows | Update Strategy | Ingest Time | Storage Size | Query Type | Query Time | Notes | 
+| Test Case |  Action | Target | Rows | Update Strategy | Ingest Time | Storage Size | Query Type | Query Time | Notes | 
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | 
-| TC01 | Parquet | Files | 10K | Full Refresh | 3.2s | 12 MB | N/A | N/A | No tabular access | 
-| TC02 | Parquet | Files | 1M | Full Refresh | 5.1s | 118 MB | N/A | N/A | Overwrite mode | 
-| TC03 | Parquet | Files | 10K | Batch | 3.4s | 12 MB | N/A | N/A | Append + dedup | 
-| TC04 | Parquet | Files | 1M | Batch | 5.6s | 120 MB | N/A | N/A | Append + dedup | 
-| TC05 | Parquet | Files | 10K | CDC | 4.2s | 13 MB | N/A | N/A | Merge logic applied | 
-| TC06 | Parquet | Files | 1M | CDC | 6.3s | 122 MB | N/A | N/A | Merge logic applied | 
-| TC07 | Shortcut to Delta | Tables | 10K | Full Refresh | 3.5s | 14 MB | Filter | 1.2s | Overwrite mode | 
-| TC08 | Shortcut to Delta | Tables | 1M | Full Refresh | 6.2s | 130 MB | Aggregate | 2.8s | Overwrite mode | 
-| TC09 | Shortcut to Delta | Tables | 10K | Batch | 4.1s | 14 MB | Join | 1.6s | Append + dedup | 
-| TC10 | Shortcut to Delta | Tables | 1M | Batch | 6.8s | 132 MB | Filter | 2.2s | Append + dedup | 
-| TC11 | Shortcut to Delta | Tables | 10K | CDC | 4.8s | 14 MB | Filter | 1.2s | Merge logic applied | 
-| TC12 | Shortcut to Delta | Tables | 1M | CDC | 7.1s | 135 MB | Aggregate | 3.1s | Merge logic applied | 
-| TC13 | Warehouse | Tables | 10K | Full Refresh | 2.9s | 0 MB | Filter | 1.1s | Metadata sync delay: 0.3s | 
-| TC14 | Warehouse | Tables | 1M | Full Refresh | 5.4s | 0 MB | Join | 2.9s | Metadata sync delay: 0.5s | 
-| TC15 | Warehouse | Tables | 10K | Batch | 3.2s | 0 MB | Aggregate | 1.4s | Append + dedup | 
-| TC16 | Warehouse | Tables | 1M | Batch | 6.1s | 0 MB | Join | 3.2s | Append + dedup | 
-| TC17 | Warehouse | Tables | 10K | CDC | 3.9s | 0 MB | Filter | 1.3s | Merge logic applied | 
-| TC18 | Warehouse | Tables | 1M | CDC | 6.7s | 0 MB | Aggregate | 3.4s | Merge logic applied | 
-
+| TC.01.x | Load   | Delta     | per x | - | 3.2s | 12 MB | - | - | Initial load | 
+| TC.02.x | Load   | Warehouse | per x | - | 3.2s | 12 MB | - | - | Initial load | 
+| TC.03.x | Update | Delta     | per x | Full Refresh | 3.2s | 12 MB | - | - | Overwrite Target | 
+| TC.04.x | Update | Warehouse | per x | Full Refresh | 3.2s | 12 MB | - | - | Overwrite Target | 
+| TC.05.x | Update | Delta     | per x | Full Compare | 3.2s | 12 MB | - | - | Compare and Append | 
+| TC.06.x | Update | Warehouse | per x | Full Compare | 3.2s | 12 MB | - | - | Compare and Append | 
+| TC.07.x | Update | Delta     | per x | Incremental | 3.2s | 12 MB | - | - | Append inserts/updates/deletes | 
+| TC.08.x | Update | Warehouse | per x | Incremental | 3.2s | 12 MB | - | - | Append inserts/updates/deletes | 
+| TC.09.x | Update | Delta     | per x | CDC | 3.2s | 12 MB | - | - | Append inserts/updates/deletes with possible multiple updates per record | 
+| TC.10.x | Update | Warehouse | per x | CDC | 3.2s | 12 MB | - | - | Append inserts/updates/deletes with possible multiple updates per record | 
+| TC.11.x | Query    | Delta             | per x | - | - | - | Aggregate | 1.2s | Notebook, measure performance | 
+| TC.12.x | Query    | Shortcut to Delta | per x | - | - | - | Aggregate | 1.2s | Power BI or Notebook, measure performance | 
+| TC.13.x | Query    | Warehouse         | per x | - | - | - | Aggregate | 1.2s | Power BI or Notebook, measure performance | 
+| TC.14.x | Storage Check | Delta     | - | - | - | 12 MB | - | - | Size & cost of storage | 
+| TC.15.x | Storage Check | Warehouse | - | - | - | 12 MB | - | - | Size & cost of storage | 
+| TC.16.x | Metrics | All | - | - | - | - | - | - | Notebook or Power BI | 
 
 ---
 
