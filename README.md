@@ -220,21 +220,21 @@ The ingestion module is structured for easy swapping of external sources. To add
 
 | Test Case |  Action | Target | Rows | Update Strategy | Ingest Time | Storage Size | Query Type | Query Time | Notes | 
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | 
-| TC.01.x | Load   | Delta     | per x | - | 3.2s | 12 MB | - | - | Initial load | 
-| TC.02.x | Load   | Warehouse | per x | - | 3.2s | 12 MB | - | - | Initial load | 
-| TC.03.x | Update | Delta     | per x | Full Refresh | 3.2s | 12 MB | - | - | Overwrite Target | 
-| TC.04.x | Update | Warehouse | per x | Full Refresh | 3.2s | 12 MB | - | - | Overwrite Target | 
-| TC.05.x | Update | Delta     | per x | Full Compare | 3.2s | 12 MB | - | - | Compare and Append | 
-| TC.06.x | Update | Warehouse | per x | Full Compare | 3.2s | 12 MB | - | - | Compare and Append | 
-| TC.07.x | Update | Delta     | per x | Incremental | 3.2s | 12 MB | - | - | Append inserts/updates/deletes | 
-| TC.08.x | Update | Warehouse | per x | Incremental | 3.2s | 12 MB | - | - | Append inserts/updates/deletes | 
-| TC.09.x | Update | Delta     | per x | CDC | 3.2s | 12 MB | - | - | Append inserts/updates/deletes with possible multiple updates per record | 
-| TC.10.x | Update | Warehouse | per x | CDC | 3.2s | 12 MB | - | - | Append inserts/updates/deletes with possible multiple updates per record | 
-| TC.11.x | Query    | Delta             | per x | - | - | - | Aggregate | 1.2s | Notebook, measure performance | 
-| TC.12.x | Query    | Shortcut to Delta | per x | - | - | - | Aggregate | 1.2s | Power BI or Notebook, measure performance | 
-| TC.13.x | Query    | Warehouse         | per x | - | - | - | Aggregate | 1.2s | Power BI or Notebook, measure performance | 
-| TC.14.x | Storage Check | Delta     | - | - | - | 12 MB | - | - | Size & cost of storage | 
-| TC.15.x | Storage Check | Warehouse | - | - | - | 12 MB | - | - | Size & cost of storage | 
+| TC.01.x | Load   | delta_refresh_load<br>delta_compare_load<br>delta_increment_load | per x | - | 3.2s | 12 MB | - | - | Initial load; benchmark only one | 
+| TC.02.x | Load   | wh_table_refresh_load<br>wh_table_compare_load<br>wh_table_increment_load | per x | - | 3.2s | 12 MB | - | - | Initial load; benchmark only one | 
+| TC.03.x | Update | delta_refresh_load     | per x | Full Refresh | 3.2s | 12 MB | - | - | Overwrite Target | 
+| TC.04.x | Update | wh_table_refresh_load | per x | Full Refresh | 3.2s | 12 MB | - | - | Overwrite Target | 
+| TC.05.x | Update | delta_compare_load     | per x | Full Compare | 3.2s | 12 MB | - | - | Compare and Append | 
+| TC.06.x | Update | wh_table_compare_load | per x | Full Compare | 3.2s | 12 MB | - | - | Compare and Append | 
+| TC.07.x | Update | delta_increment_load     | per x | Incremental | 3.2s | 12 MB | - | - | Append inserts/updates/deletes | 
+| TC.08.x | Update | wh_table_increment_load | per x | Incremental | 3.2s | 12 MB | - | - | Append inserts/updates/deletes | 
+| TC.09.x<br>(deferred) | Update | delta_cdc_load     | per x | CDC | 3.2s | 12 MB | - | - | Append inserts/updates/deletes with possible multiple updates per record | 
+| TC.10.x<br>(deferred) | Update | wh_table_cdc_load | per x | CDC | 3.2s | 12 MB | - | - | Append inserts/updates/deletes with possible multiple updates per record | 
+| TC.11.x | Query    | delta_increment_load                | per x | - | - | - | Aggregate | 1.2s | Notebook, measure performance | 
+| TC.12.x | Query    | WH shortcut to delta_increment_load | per x | - | - | - | Aggregate | 1.2s | Power BI or Notebook, measure performance | 
+| TC.13.x | Query    | wh_table_increment_load             | per x | - | - | - | Aggregate | 1.2s | Power BI or Notebook, measure performance | 
+| TC.14.x | Storage Check | delta_refresh_load<br>delta_compare_load<br>delta_increment_load     | - | - | - | 12 MB | - | - | Size & cost of storage | 
+| TC.15.x | Storage Check | wh_table_refresh_load<br>wh_table_compare_load<br>wh_table_increment_load | - | - | - | 12 MB | - | - | Size & cost of storage | 
 | TC.16.x | Metrics | All | - | - | - | - | - | - | Notebook or Power BI | 
 
 ---
