@@ -136,6 +136,12 @@ To simulate ingesting data from an external system into Microsoft Fabric, the fr
 **Future extensibility:**  
 The workflow is designed so you can easily replace the external lakehouse with an external SQL database or Blob Storage source, to benchmark those ingestion patterns.
 
+**Note on Parquet File Compatibility for Spark and Pandas**
+  - By default, pandas/pyarrow writes timestamps with nanosecond precision (`TIMESTAMP(NANOS)`), which Spark cannot read. Using millisecond precision (`coerce_timestamps='ms'`) avoids this issue. Parquet files created with pandas using `coerce_timestamps='ms'` can be read by both pandas and Spark.
+  - Proven Practice:  Use `coerce_timestamps='ms'` in pandas `.to_parquet()` calls when you intend to read Parquet files with Spark in Microsoft Fabric or Databricks. Example: `df.to_parquet("path/to/file.parquet", coerce_timestamps="ms")`
+  - References: 
+        - [PyArrow Documentation: Parquet Timestamp Compatibility](https://arrow.apache.org/docs/python/generated/pyarrow.parquet.write_table.html)
+        - [Spark Parquet Timestamp Support](https://spark.apache.org/docs/latest/sql-data-sources-parquet.html)
 ---
 
 ### Ingestion Targets
