@@ -521,6 +521,26 @@ automation:
 | Capacity Cost – Storage | 2.3.4, 4.4.1 | Estimates storage impact per test case |
 | Capacity Cost – Processing | 2.3.5, 4.4.2 | Tracks compute time and refresh frequency impact |
 
+## 🤪 Quirky Lessons Learned
+
+### 🕰️ SQL Endpoints and Warehouse tables need time zones for time stamps
+
+**Timestamp Compatibility for Fabric Warehouse Ingestion**
+
+- Data type `timestamp_ntz` crashes both the warehouse table loads and delta table SQL endpoint reads.  We fix this in the synthetic data creation.  But it can break all too easily.
+- `spark.read.parquet(base_file)` **(works)**: loads timestamp columns as `timestamp` (compatible with Warehouse).
+- `spark.read.format("parquet").load(base_file)` **(does not work)**: loads timestamp columns as `timestamp_ntz` (not compatible).
+
+**Alternative helper function (if needed):**
+```python
+from pyspark.sql.functions import col
+def fix_timestamp_ntz(df):
+    for field in df.schema.fields:
+        if field.dataType.typeName() == 'timestamp_ntz':
+            df = df.withColumn(field.name, col(field.name).cast("timestamp"))
+    return df
+```
+
 ## 🙏 Acknowledgments
 
 - Uses [dawidd6/action-download-artifact](https://github.com/dawidd6/action-download-artifact) for workflow artifact management.
