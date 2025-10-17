@@ -45,6 +45,13 @@ notebooks_to_create = [
         "lakehouses": ["BenchmarkLakehouse"],
         "warehouses": ["BenchmarkWarehouse"],
     },
+    {
+        "displayName": "86.ResetHelper",
+        "description": "Delete elements for re-provisioning",
+        "file": "notebooks/reset_helper_notebook.ipynb",
+        "lakehouses": ["DataSourceLakehouse", "BenchmarkLakehouse"],
+        "warehouses": ["BenchmarkWarehouse"],
+    },
 ]
 lakehouse_name = "DataSourceLakehouse"
 workspace_name = "FabricBenchmarking"
