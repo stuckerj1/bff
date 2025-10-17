@@ -525,13 +525,11 @@ automation:
 
 ### 🕰️ SQL Endpoints and Warehouse tables need time zones for time stamps
 
-**Timestamp Compatibility for Fabric Warehouse Ingestion**
-
-- Data type `timestamp_ntz` crashes both the warehouse table loads and delta table SQL endpoint reads.  We fix this in the synthetic data creation.  But it can break all too easily.
+Ambiguous time zones are more than an end-user pain.  Data type `timestamp_ntz` crashes both the warehouse table loads and delta table SQL endpoint reads.  We fix this in the synthetic data creation.  But it can break all too easily if time zone info is lost.
 - `spark.read.parquet(base_file)` **(works)**: loads timestamp columns as `timestamp` (compatible with Warehouse).
 - `spark.read.format("parquet").load(base_file)` **(does not work)**: loads timestamp columns as `timestamp_ntz` (not compatible).
 
-**Alternative helper function (if needed):**
+Alternative helper function (if needed):
 ```python
 from pyspark.sql.functions import col
 def fix_timestamp_ntz(df):
