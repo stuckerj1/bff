@@ -525,7 +525,7 @@ automation:
 
 ### 🕰️ SQL Endpoints and Warehouse tables need time zones for time stamps
 
-Ambiguous time zones are more than an end-user pain.  Data type `timestamp_ntz` crashes both the warehouse table loads and delta table SQL endpoint reads.  We fix this in the synthetic data creation.  But it can break all too easily if time zone info is lost.
+Ambiguous time zones are more than an end-user pain.  Data type `timestamp_ntz` 💥crashes both the warehouse table loads and delta table SQL endpoint reads.  We fix this in the synthetic data creation.  But it can break all too easily if time zone info is lost.
 - `spark.read.parquet(base_file)` **(works)**: loads timestamp columns as `timestamp` (compatible with Warehouse).
 - `spark.read.format("parquet").load(base_file)` **(does not work)**: loads timestamp columns as `timestamp_ntz` (not compatible).
 
@@ -538,6 +538,9 @@ def fix_timestamp_ntz(df):
             df = df.withColumn(field.name, col(field.name).cast("timestamp"))
     return df
 ```
+### 🕳️ Disproving the NULL hypothesis
+
+Some dataframe actions cause the df to think a column schema is `not nullable` when it has been, and always will be `nullable`.  The df schema nullability has to match the warehouse's nullability _exactly_ for every column, or the load 💥fails. We created a helper function to remind the df that it can take null values whenever it wants to.
 
 ## 🙏 Acknowledgments
 
