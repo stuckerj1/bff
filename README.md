@@ -82,7 +82,7 @@ flowchart LR
 - [ ] Run Notebooks in order:  
   - [ ] 1.GenerateData - Synthetic data generation  
   - [ ] 2.IngestData - Initial data load 
-  - [ ] 3.ApplyUpdates - Batch or CDC 
+  - [ ] 3.ApplyUpdates - Full refresh, full compare, increment, (CDC deferred)
   - [ ] 4.RunQueries - Capture query benchmarking  timings
   - [ ] 5.VisualizeMetrics - Display metrics from capture
 
@@ -92,7 +92,7 @@ Troubleshooting Steps If Needed:
 
 - [ ] Confirm DataSourceLakehouse folder structure and data:  
   - `base/` → for initial datasets  
-  - `updates/` → for batch & CDC slices  
+  - `updates/` → for increment (CDC deferred)  
   - Folder creation handled via 1.GenerateData notebook logic 
 
 - [ ] Semantic model connected to Delta tables
@@ -117,7 +117,7 @@ Troubleshooting Steps If Needed:
 | `location` | Files, Tables, Shortcut | 
 | `access_mode` | Native, Shortcut | 
 | `query_type` | Filter, Join, Aggregate | 
-| `update_strategy` | Full Refresh, Batch, CDC | 
+| `update_strategy` | Full Refresh, Full Compare, Increment (CDC deferred) | 
 
 ---
 
@@ -177,7 +177,7 @@ The ingestion module is structured for easy swapping of external sources. To add
 ### 1. Synthetic Data Generation
 - **Purpose:** Create parameterized synthetic datasets (base and incremental slices) in DataSourceLakehouse.
 - **Parameters:** `row_count` (e.g., 10K, 1M), schema, distribution, change %, insert %, delete %.
-- **Output:** Parquet/Delta base data, batch update slices, CDC slices.
+- **Output:** Parquet/Delta base data, increment update slices (CDC deferred).
 
 ### 2. Ingestion & Lakehouse/Warehouse Provisioning
 - **Targets:** 
@@ -187,8 +187,8 @@ The ingestion module is structured for easy swapping of external sources. To add
 - **Note:** Includes step to provision BenchmarkWarehouse.
 
 ### 3. Update Strategy & Incremental Load Performance Testing
-- **Strategies:** Full Refresh, Batch (append/deduplication), CDC (merge logic).
-- **Purpose:** Benchmark incremental ingestion for all targets.
+- **Strategies:** Full Refresh, Full Compare (append changes), Increment (append changes), (CDC deferred).
+- **Purpose:** Benchmark updates for all targets.
 - **Metrics:** Ingestion time, update latency, resource usage, reliability, correctness metrics.
 
 ### 4. Query Performance Testing
@@ -308,8 +308,8 @@ The ingestion module is structured for easy swapping of external sources. To add
 #### 📁 Folder Initialization (via Notebook)
 
 - `base/` → for initial datasets  
-- `updates/` → for batch update slices  
-- `cdc/` → for CDC merge slices
+- `updates/` → for increment update slices  
+- `cdc/` → for CDC merge slices (CDC deferred)
 
 ---
 
@@ -331,7 +331,7 @@ Synthetic data generation.
 Initial data load
 
 #### `apply_updates.ipynb` = `3.ApplyUpdates`
-Batch or CDC
+Load updates and capture metrics for each update strategy
 
 #### `run_queries.ipynb` = `4.RunQueries`
 Capture query benchmarking timings
@@ -355,7 +355,7 @@ benchmark_project:
     row_count: [10K, 1M]
     format: ["Parquet", "Delta"]
     location: ["Files", "Tables", "Shortcut"]
-    update_strategy: ["Full Refresh", "Batch", "CDC"]
+    update_strategy: ["Full Refresh", "Full Compare", "Increment"]
     query_type: ["Filter", "Join", "Aggregate"]
   modules:
     - synthetic_data_generator
@@ -365,15 +365,7 @@ benchmark_project:
     - scorecard_generator
     - metric_capture
 ```
-
-### 📊 Scorecard Template (incomplete, need to flesh out)
-
-| Test Case | Format | Location | Rows | Update Strategy | Ingest Time | Storage Size | Query Type | Query Time | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| TC01 | Parquet | Files | 10K | Full Refresh |  |  |  |  |  |
-| TC02 | Delta | Tables | 1M | CDC |  |  | Aggregate |  |  |
-| TC03 | Shortcut | Tables | 10K | Batch |  |  | Join |  |  |
-
+(CDC deferred)
 
 ### Automation Sweep
 
@@ -398,7 +390,7 @@ automation:
 - 1.1 Create Microsoft Fabric workspace (Premium capacity)
 - 1.2 Assign workspace admin role
 - 1.3 Create Lakehouse
-  - 1.3.1 Define folder structure for test cases (`base/`, `updates/`, `cdc/`)
+  - 1.3.1 Define folder structure for test cases (`base/`, `updates/`, `cdc/`) (CDC deferred)
   - 1.3.2 Enable Delta support
 - 1.4 Set up Fabric Capacity Metrics App
   - 1.4.1 Confirm workspace telemetry is active
@@ -431,13 +423,13 @@ automation:
 
 ### Phase 3: Test Case Execution
 - 3.1 Ingest datasets
-  - 3.1.1 Parquet: Full Refresh, Batch, CDC
-  - 3.1.2 Delta: Full Refresh, Batch, CDC
+  - 3.1.1 Parquet: Full Refresh, Full Compare, Increment (CDC deferred)
+  - 3.1.2 Delta: Full Refresh, Full Compare, Increment (CDC deferred)
   - 3.1.3 Shortcut to Delta: All strategies
 - 3.3 Apply update strategies
   - 3.3.1 Full Refresh (`overwrite`)
-  - 3.3.2 Batch (`append` + deduplication)
-  - 3.3.3 CDC (`MERGE INTO` or `applyChanges()`)
+  - 3.3.2 Full Compare (detect and `append` changes)
+  - 3.3.3 Increment (`append` changes`)
 - 3.4 Run query benchmarks
   - 3.4.1 PySpark: Filter, Join, Aggregate
   - 3.4.2 Power BI: Refresh and report latency
@@ -495,7 +487,7 @@ automation:
 | Notebook Purpose | WBS Phase | Description |
 |------------------|-----------|-------------|
 | `data_generation.ipynb` | 2.1.1, 2.5 | Generates synthetic datasets and update slices |
-| `ingestion.ipynb` | 2.1.2, 3.1 | Ingests data using full refresh, batch, and CDC |
+| `ingestion.ipynb` | 2.1.2, 3.1 | Ingests data using full refresh, full compare, increment (CDC deferred) |
 | `update_logic.ipynb` | 2.1.3, 3.3 | Applies update strategies and validates correctness |
 | `query_benchmarking.ipynb` | 2.1.4, 3.4 | Runs filter, join, and aggregate queries |
 | `metric_capture.ipynb` | 4.1–4.4 | Captures ingestion, update, query, and capacity metrics |
