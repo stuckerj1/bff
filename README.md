@@ -5,9 +5,6 @@ This repository contains a modular, repeatable benchmarking framework for Micros
 ## 🚀 Purpose
 To evaluate ingestion, update, and query performance across different formats, strategies, and access modes in Microsoft Fabric.
 
-## 🧩 Repo Structure
-See [`GitHub Repo Structure`](#github-repo-structure-for-benchmarking-framework) section for full layout.
-
 ## 🔧 Features
 - Automated Fabric workspace and lakehouse provisioning
 - Notebook upload and configuration via REST API
