@@ -1,0 +1,32 @@
+# Parameter sets: one item per workspace (name must be unique)
+# Edit/add parameter sets for the row counts, sources, formats, and update strategies you want to benchmark.
+
+parameter_sets:
+  - name: "BFF 10k LH to WH Full Refresh"
+    dataset_name: "10k"
+    row_count: 10000
+    source: "lakehouse"            # lakehouse | sql
+    format: "warehouse"                # delta | warehouse
+    update_strategy: "Full Refresh"
+    notes: "Baseline 10k full refresh lakehouse -> warehouse"
+    run_order:
+      - generate_data
+      - ingest_data
+      - apply_updates
+      - run_queries
+
+  - name: "BFF 1M LH to WH Full Refresh"
+    dataset_name: "1m"
+    row_count: 1000000
+    source: "lakehouse"
+    format: "warehouse"
+    update_strategy: "Full Refresh"
+    notes: "Scale test 1M rows from lakehouse to warehouse, full refresh updates"
+
+  # Example: add more parameter sets for Full Compare, Incremental, SQL source, etc.
+  # - name: "BFF 10k SQL to LH Incremental"
+  #   dataset_name: "10k"
+  #   row_count: 10000
+  #   source: "sql"
+  #   format: "delta"
+  #   update_strategy: "Incremental"
