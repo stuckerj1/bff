@@ -40,6 +40,8 @@ jobs:
         run: |
           pwd
           echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          echo "Contents of repo root:"
+          ls -la || true
           echo "Contents of .state:"
           ls -la .state || true
           for f in .state/*.json; do
@@ -51,7 +53,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bff-resources
-          path: .state/**
-          path: .state/*
-          path: .state/*.json
+          path: |
+            .state/**
+            .state/*
+            .state/*.json
 
