@@ -38,6 +38,8 @@ jobs:
 
       - name: Show .state contents (debug)
         run: |
+          pwd
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
           echo "Contents of .state:"
           ls -la .state || true
           for f in .state/*.json; do
@@ -50,4 +52,6 @@ jobs:
         with:
           name: bff-resources
           path: .state/**
+          path: .state/*
+          path: .state/*.json
 
