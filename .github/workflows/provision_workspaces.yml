@@ -355,7 +355,7 @@ jobs:
           echo "Summary contents:"
           cat ./artifacts/workspaces_summary.json || true
 
-      - name: Example: read summary in Python and iterate
+      - name: Example read summary in Python and iterate
         run: |
           python - <<'PY'
           import json
