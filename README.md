@@ -51,8 +51,12 @@ flowchart LR
   - `CAPACITY_ID` (from Fabric > Admin Portal > Capacity settings > Actions > [Select capacity, e.g. Trial] > Actions > Capacity ID)
 
 - [ ] For testing Azure SQL Database as a data source, provision a `SQL Database` from the Azure Marketplace:
-  - Note: When doing this manually in the portal, you will see an offer "Want to try Azure SQL Database for free?"  Click `Accept Offer` to make this a free instance. You may need to search for an available region to put the free database.
-  - Provide a unique server name and database name (e.g., benchmarking).  Enable `Allow Azure services and resources to access this server`.
+  - Note: You can use the Azure SQL Database free offer
+      - When doing this manually in the portal, you will see an offer "Want to try Azure SQL Database for free?"
+      - Click `Accept Offer` to make this a free instance.
+      - You may need to search for an available region to put the free database.
+  - Provide a unique server name and database name (e.g., benchmarking).
+  - Enable `Allow Azure services and resources to access this server`.
   - Make yourself an admin on the server.
   - Add `FabricBenchmarkingProvisioner` to the `SQL Server Contributor` role.
 
