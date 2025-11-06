@@ -1,0 +1,367 @@
+# Provision BFF Controller and Action Workspaces (test parameter sets)
+# - Reads config/test_parameter_sets.yml
+# - Builds/validates a matrix and uploads matrix.json artifact
+# - Calls tools/provision_workspace.py to create the BFF Controller workspace (writes controller.json)
+# - Calls tools/provision_workspace.py for each action workspace (writes workspace-<sanitized>.json)
+# - Uploads per-workspace artifacts and assembles a summary (workspaces_summary.json)
+#
+# NOTE:
+# - This variant uses the existing FabricBenchmarkingProvisioner secrets (TENANT_ID, CLIENT_ID, CLIENT_SECRET, CAPACITY_ID, ADMIN_OBJECT_ID)
+#   and passes them into the script steps via environment variables (as you requested).
+# - If tools/provision_workspace.py needs az CLI authentication, ensure it consumes the provided env vars to create its own token
+#   (or add an azure/login step that uses AZURE_CREDENTIALS).
+name: Provision BFF Controller and Action Workspaces (test parameter sets)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  gen-matrix:
+    name: Build matrix from config/test_parameter_sets.yml
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install PyYAML
+        run: python -m pip install pyyaml
+
+      - id: build-matrix
+        name: Build matrix JSON and validate config
+        shell: bash
+        run: |
+          python - <<'PY'
+          import yaml, json, sys, re, os
+
+          cfg_path = "config/test_parameter_sets.yml"
+          if not os.path.exists(cfg_path):
+              print("ERROR: config/test_parameter_sets.yml not found", file=sys.stderr)
+              sys.exit(2)
+
+          cfg = yaml.safe_load(open(cfg_path, 'r', encoding='utf-8'))
+          datasets = {d['name']: d for d in cfg.get('datasets', [])}
+          param_sets = cfg.get('parameter_sets', [])
+
+          seen_names = set()
+          includes = []
+          def sanitize(s):
+              s = s.strip().lower()
+              s = re.sub(r'\s+', '-', s)
+              s = re.sub(r'[^a-z0-9-]', '', s)
+              return s[:40]
+
+          for i, ps in enumerate(param_sets):
+              name = ps.get('name')
+              if not name:
+                  raise SystemExit(f"parameter_sets[{i}] missing name")
+              if name in seen_names:
+                  raise SystemExit(f"duplicate parameter_sets.name: {name}")
+              seen_names.add(name)
+
+              ds_name = ps.get('dataset_name')
+              if not ds_name:
+                  raise SystemExit(f"parameter_sets[{i}] missing dataset_name")
+              ds = datasets.get(ds_name)
+              if not ds:
+                  raise SystemExit(f"parameter_sets[{i}] references unknown dataset_name '{ds_name}'")
+
+              # Basic validation
+              fmt = ps.get('format')
+              if fmt not in ('delta', 'warehouse'):
+                  raise SystemExit(f"parameter_sets[{i}] invalid format '{fmt}' (allowed: delta, warehouse)")
+              src = ps.get('source')
+              if src not in ('lakehouse', 'sql'):
+                  raise SystemExit(f"parameter_sets[{i}] invalid source '{src}' (allowed: lakehouse, sql)")
+
+              upd = ps.get('update_strategy', '')
+              if upd not in ('Full Refresh', 'Full Compare', 'Incremental'):
+                  print(f"WARNING: parameter_sets[{i}] has update_strategy '{upd}' (recommended: Full Refresh, Full Compare, Incremental)", file=sys.stderr)
+
+              merged = {}
+              merged.update(ds)
+              merged.update(ps)
+
+              sanitized = sanitize(name)
+              includes.append({
+                  "workspace_name": merged["name"],
+                  "sanitized_name": sanitized,
+                  "dataset_name": merged["dataset_name"],
+                  "row_count": str(int(merged["row_count"])),
+                  "source": merged["source"],
+                  "format": merged["format"],
+                  "update_strategy": merged.get("update_strategy",""),
+                  "change_fraction": merged.get("change_fraction"),
+                  "new_fraction": merged.get("new_fraction"),
+                  "delete_fraction": merged.get("delete_fraction"),
+                  "seed": merged.get("seed"),
+                  "notes": merged.get("notes",""),
+                  "run_order": merged.get("run_order", [])
+              })
+
+          matrix = {"include": includes}
+          matrix_json = json.dumps(matrix)
+
+          # write matrix.json for artifact upload
+          with open('matrix.json', 'w', encoding='utf-8') as f:
+              f.write(matrix_json)
+
+          # Write to GITHUB_OUTPUT for downstream strategy.matrix consumption
+          gh_out = os.environ.get('GITHUB_OUTPUT')
+          if gh_out:
+              with open(gh_out, 'a', encoding='utf-8') as fh:
+                  fh.write(f"matrix={matrix_json}\n")
+          else:
+              print(matrix_json)
+          print("Matrix generation complete. entries=", len(includes))
+          PY
+
+      - name: Upload matrix artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bff-matrix
+          path: matrix.json
+
+  provision-controller:
+    name: Provision BFF Controller workspace (single)
+    runs-on: ubuntu-latest
+    needs: gen-matrix
+    outputs:
+      controller_workspace_id: ${{ steps.save-controller.outputs.controller_id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Provision Controller workspace via script
+        id: provision-controller
+        env:
+          CONTROLLER_NAME: "BFF-Controller"
+          # pass the existing FabricBenchmarkingProvisioner secrets into the script
+          TENANT_ID: ${{ secrets.TENANT_ID }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          CAPACITY_ID: ${{ secrets.CAPACITY_ID }}
+          ADMIN_OBJECT_ID: ${{ secrets.ADMIN_OBJECT_ID }}
+        run: |
+          set -euo pipefail
+          echo "Calling tools/provision_workspace.py to provision Controller '${CONTROLLER_NAME}'"
+          mkdir -p ./controller-artifacts
+          # The script should read credentials from environment or accept CLI args; do not print secrets
+          python ./tools/provision_workspace.py \
+            --workspace-name "${CONTROLLER_NAME}" \
+            --sanitized-name "bff-controller" \
+            --output ./controller-artifacts/controller.json
+          echo "Controller provisioning script completed. controller.json:"
+          cat ./controller-artifacts/controller.json || true
+          # extract workspace_id using python (avoid jq dependency)
+          CONTROLLER_ID=$(python - <<PY
+import json
+print(json.load(open('controller-artifacts/controller.json'))['workspace_id'])
+PY
+)
+          echo "CONTROLLER_ID=${CONTROLLER_ID}" >> $GITHUB_ENV
+
+      - name: Upload controller artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: controller-workspace
+          path: controller-artifacts/controller.json
+
+      - name: Set controller id output
+        id: save-controller
+        run: |
+          echo "controller_id=${{ env.CONTROLLER_ID }}" >> $GITHUB_OUTPUT
+
+  provision-workspaces:
+    name: Provision action workspaces per parameter set
+    runs-on: ubuntu-latest
+    needs: [gen-matrix, provision-controller]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.gen-matrix.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Debug matrix entry
+        run: |
+          echo "---- Matrix entry ----"
+          echo "workspace_name: ${{ matrix.workspace_name }}"
+          echo "sanitized_name: ${{ matrix.sanitized_name }}"
+          echo "dataset_name: ${{ matrix.dataset_name }}"
+          echo "row_count: ${{ matrix.row_count }}"
+          echo "source: ${{ matrix.source }}"
+          echo "format: ${{ matrix.format }}"
+          echo "update_strategy: ${{ matrix.update_strategy }}"
+          echo "change_fraction: ${{ matrix.change_fraction }}"
+          echo "new_fraction: ${{ matrix.new_fraction }}"
+          echo "delete_fraction: ${{ matrix.delete_fraction }}"
+          echo "seed: ${{ matrix.seed }}"
+          echo "notes: ${{ matrix.notes }}"
+          echo "run_order: ${{ toJson(matrix.run_order) }}"
+          echo "----------------------"
+
+      - name: Provision action workspace via script
+        id: provision-ws
+        env:
+          WORKSPACE_NAME: ${{ matrix.workspace_name }}
+          SANITIZED_NAME: ${{ matrix.sanitized_name }}
+          DATASET_NAME: ${{ matrix.dataset_name }}
+          ROW_COUNT: ${{ matrix.row_count }}
+          SOURCE: ${{ matrix.source }}
+          FORMAT: ${{ matrix.format }}
+          UPDATE_STRATEGY: ${{ matrix.update_strategy }}
+          CHANGE_FRACTION: ${{ matrix.change_fraction }}
+          NEW_FRACTION: ${{ matrix.new_fraction }}
+          DELETE_FRACTION: ${{ matrix.delete_fraction }}
+          SEED: ${{ matrix.seed }}
+          NOTES: ${{ matrix.notes }}
+          # pass the existing FabricBenchmarkingProvisioner secrets into the script
+          TENANT_ID: ${{ secrets.TENANT_ID }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          CAPACITY_ID: ${{ secrets.CAPACITY_ID }}
+          ADMIN_OBJECT_ID: ${{ secrets.ADMIN_OBJECT_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p ./workspace-artifacts
+          echo "Calling tools/provision_workspace.py to provision action workspace '${WORKSPACE_NAME}' (sanitized: ${SANITIZED_NAME})"
+          python ./tools/provision_workspace.py \
+            --workspace-name "${WORKSPACE_NAME}" \
+            --sanitized-name "${SANITIZED_NAME}" \
+            --dataset-name "${DATASET_NAME}" \
+            --row-count "${ROW_COUNT}" \
+            --source "${SOURCE}" \
+            --format "${FORMAT}" \
+            --update-strategy "${UPDATE_STRATEGY}" \
+            --output "./workspace-artifacts/workspace-${SANITIZED_NAME}.json"
+          echo "Provision script completed. workspace artifact:"
+          cat ./workspace-artifacts/workspace-${SANITIZED_NAME}.json || true
+          # extract workspace_id into GITHUB_ENV
+          WORKSPACE_ID=$(python - <<PY
+import json
+obj = json.load(open('workspace-artifacts/workspace-${SANITIZED_NAME}.json'))
+print(obj.get('workspace_id',''))
+PY
+)
+          echo "WORKSPACE_ID=${WORKSPACE_ID}" >> $GITHUB_ENV
+          echo "workspace_id=${WORKSPACE_ID}" >> $GITHUB_OUTPUT
+
+      - name: Upload per-workspace artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-${{ matrix.sanitized_name }}
+          path: ./workspace-artifacts/workspace-${{ matrix.sanitized_name }}.json
+
+  assemble-workspaces:
+    name: Assemble workspace ids and create summary
+    runs-on: ubuntu-latest
+    needs: [provision-controller, provision-workspaces]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Show downloaded artifact files (debug)
+        run: |
+          echo "Artifacts directory listing:"
+          ls -la ./artifacts || true
+          echo "Show controller artifact content (if present):"
+          find ./artifacts -type f -name "controller.json" -print -exec cat {} \; || true
+          echo "Show per-workspace artifacts:"
+          find ./artifacts -type f -name "workspace-*.json" -print -exec echo "---- {} ----" \; -exec cat {} \; || true
+
+      - name: Merge artifacts into workspaces_summary.json
+        run: |
+          python - <<PY
+import json, glob, os
+out = {"controller": None, "workspaces": []}
+# find controller artifact
+for p in glob.glob("artifacts/**/controller.json", recursive=True):
+    try:
+        out["controller"] = json.load(open(p))
+    except Exception as e:
+        print("Failed to read", p, e)
+# find per-workspace jsons
+seen = set()
+for p in glob.glob("artifacts/**/workspace-*.json", recursive=True):
+    try:
+        j = json.load(open(p))
+        key = j.get('workspace_id') or j.get('sanitized_name') or json.dumps(j)
+        if key in seen:
+            continue
+        seen.add(key)
+        out["workspaces"].append(j)
+    except Exception as e:
+        print("Failed to read", p, e)
+os.makedirs('out', exist_ok=True)
+with open('out/workspaces_summary.json','w',encoding='utf-8') as fh:
+    json.dump(out, fh, indent=2)
+print("Wrote out/workspaces_summary.json with", len(out["workspaces"]), "workspaces")
+PY
+
+      - name: Upload merged summary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bff-workspaces-summary
+          path: out/workspaces_summary.json
+
+      - name: Expose merged summary (small) as job output
+        id: set-summary
+        run: |
+          summary=$(python - <<PY
+import json
+s=json.load(open('out/workspaces_summary.json'))
+print(json.dumps({"controller_id": s.get("controller",{}).get("workspace_id",""), "workspace_count": len(s.get("workspaces",[]))}))
+PY
+)
+          echo "workspaces_summary=${summary}" >> $GITHUB_OUTPUT
+
+  orchestration:
+    name: Controller orchestration (example consumer)
+    runs-on: ubuntu-latest
+    needs: assemble-workspaces
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download merged summary (artifact)
+        uses: actions/download-artifact@v4
+        with:
+          name: bff-workspaces-summary
+          path: ./artifacts
+
+      - name: Show summary
+        run: |
+          echo "Summary contents:"
+          cat ./artifacts/workspaces_summary.json || true
+
+      - name: Example: read summary in Python and iterate
+        run: |
+          python - <<PY
+import json
+s = json.load(open('./artifacts/workspaces_summary.json'))
+print("Controller:", s.get("controller"))
+for ws in s.get("workspaces", []):
+    print("Workspace:", ws.get("workspace_name"), "id:", ws.get("workspace_id"))
+PY
