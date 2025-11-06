@@ -277,38 +277,63 @@ jobs:
           echo "Artifacts directory listing:"
           ls -la ./artifacts || true
           echo "Show controller artifact content (if present):"
-          find ./artifacts -type f -path "*/.state/controller.json" -print -exec cat {} \; || true
+          # show any controller.json found anywhere under the extracted artifacts
+          find ./artifacts -type f -name "controller.json" -print -exec sh -c 'echo "---- {} ----"; cat "{}"' \; || true
           echo "Show per-workspace artifacts:"
-          find ./artifacts -type f -path "*/.state/workspace-*.json" -print -exec echo "---- {} ----" \; -exec cat {} \; || true
+          # show any workspace-*.json found anywhere under the extracted artifacts
+          find ./artifacts -type f -name "workspace-*.json" -print -exec sh -c 'echo "---- {} ----"; cat "{}"' \; || true
 
       - name: Merge artifacts into .state/workspaces_summary.json
         run: |
           python - <<'PY'
           import json, glob, os
           out = {"controller": None, "workspaces": []}
-          # find controller artifact
-          for p in glob.glob("artifacts/**/.state/controller.json", recursive=True):
+
+          # helper to iterate candidate patterns and yield files
+          def iter_files(patterns):
+              seen = set()
+              for pat in patterns:
+                  for p in glob.glob(pat, recursive=True):
+                      if p in seen:
+                          continue
+                      seen.add(p)
+                      yield p
+
+          # Candidate controller locations (prefer .state/controller.json within artifact, but also accept controller.json at artifact root)
+          controller_patterns = [
+              "artifacts/**/.state/controller.json",
+              "artifacts/**/controller.json"
+          ]
+          for p in iter_files(controller_patterns):
               try:
-                  out["controller"] = json.load(open(p))
+                  out["controller"] = json.load(open(p, "r", encoding="utf-8"))
+                  break
               except Exception as e:
-                  print("Failed to read", p, e)
-          # find per-workspace jsons
-          seen = set()
-          for p in glob.glob("artifacts/**/.state/workspace-*.json", recursive=True):
+                  print("Failed to read controller candidate", p, e)
+
+          # Candidate workspace locations (both .state/workspace-*.json and workspace-*.json at artifact root)
+          workspace_patterns = [
+              "artifacts/**/.state/workspace-*.json",
+              "artifacts/**/workspace-*.json"
+          ]
+          seen_keys = set()
+          for p in iter_files(workspace_patterns):
               try:
-                  j = json.load(open(p))
-                  key = j.get('workspace_id') or j.get('sanitized_name') or json.dumps(j)
-                  if key in seen:
+                  j = json.load(open(p, "r", encoding="utf-8"))
+                  key = j.get("workspace_id") or j.get("sanitized_name") or json.dumps(j)
+                  if key in seen_keys:
                       continue
-                  seen.add(key)
+                  seen_keys.add(key)
                   out["workspaces"].append(j)
               except Exception as e:
-                  print("Failed to read", p, e)
+                  print("Failed to read workspace candidate", p, e)
+
           os.makedirs('.state', exist_ok=True)
           with open('.state/workspaces_summary.json','w',encoding='utf-8') as fh:
               json.dump(out, fh, indent=2)
           print("Wrote .state/workspaces_summary.json with", len(out["workspaces"]), "workspaces")
           PY
+        shell: bash
 
       - name: Upload merged summary artifact
         uses: actions/upload-artifact@v4
@@ -319,10 +344,12 @@ jobs:
       - name: Expose merged summary (small) as job output
         id: set-summary
         run: |
+          # guard against controller being present but set to None
           summary=$(
-            python -c "import json,sys; s=json.load(open('.state/workspaces_summary.json')); import json as _j; print(_j.dumps({'controller_id': s.get('controller',{}).get('workspace_id',''), 'workspace_count': len(s.get('workspaces',[]))}))"
+            python -c "import json,sys; s=json.load(open('.state/workspaces_summary.json')); c=(s.get('controller') or {}); print(json.dumps({'controller_id': c.get('workspace_id',''), 'workspace_count': len(s.get('workspaces',[]))}))"
           )
           echo "workspaces_summary=${summary}" >> $GITHUB_OUTPUT
+        shell: bash
 
   orchestration:
     name: "Example: read summary in Python and iterate"
@@ -341,15 +368,16 @@ jobs:
       - name: Show summary
         run: |
           echo "Summary contents:"
-          cat ./artifacts/**/.state/workspaces_summary.json || true
+          # find and show the merged summary in whichever artifact dir it was placed
+          find ./artifacts -type f -name "workspaces_summary.json" -print -exec sh -c 'echo "---- {} ----"; cat "{}"' \; || true
 
       - name: Example read summary in Python and iterate
         run: |
           python - <<'PY'
           import json, glob
-          files=glob.glob('./artifacts/**/.state/workspaces_summary.json', recursive=True)
+          files = glob.glob('./artifacts/**/workspaces_summary.json', recursive=True)
           if files:
-              s = json.load(open(files[0]))
+              s = json.load(open(files[0], 'r', encoding='utf-8'))
           else:
               s = {"controller": None, "workspaces": []}
           print("Controller:", s.get("controller"))
