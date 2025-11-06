@@ -203,15 +203,6 @@ def main(argv=None):
     except Exception as e:
         die(f"Failed to write output to {args.output}: {e}")
 
-    # Also save a small workspace id file under .state for compatibility with older flows
-    try:
-        os.makedirs(".state", exist_ok=True)
-        with open(".state/workspace_id.txt", "w", encoding="utf-8") as fh:
-            fh.write(str(workspace_id))
-    except Exception:
-        # non-fatal if environment doesn't want .state written
-        pass
-
     print(json.dumps(out))
     return 0
 
