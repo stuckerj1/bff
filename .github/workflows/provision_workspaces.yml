@@ -5,7 +5,10 @@
 # - Calls scripts/provision_workspace.py for each action workspace (writes workspace-<sanitized>.json)
 # - Uploads per-workspace artifacts and assembles a summary (workspaces_summary.json)
 #
-# This version fixes a YAML syntax issue and ensures requests is installed before running the script.
+# Notes:
+# - Ensures requests is installed before running the script.
+# - Uses safe Python extraction (no ambiguous heredocs) to pull workspace_id from artifacts.
+# - First test runs should include --dry-run on the script invocations (you can add it to the python args).
 name: Provision BFF Controller and Action Workspaces (test parameter sets)
 
 on:
@@ -163,8 +166,8 @@ jobs:
             --output ./controller-artifacts/controller.json
           echo "Controller provisioning script completed. controller.json:"
           cat ./controller-artifacts/controller.json || true
-          # extract workspace_id using python to avoid jq dependency
-          CONTROLLER_ID=$(python - <<PY
+          # extract workspace_id using Python (no jq dependency)
+          CONTROLLER_ID=$(python - <<'PY'
 import json,sys
 print(json.load(open('controller-artifacts/controller.json')).get('workspace_id',''))
 PY
@@ -256,7 +259,7 @@ PY
           echo "Provision script completed. workspace artifact:"
           cat "./workspace-artifacts/workspace-${SANITIZED_NAME}.json" || true
           # extract workspace_id into GITHUB_ENV
-          WORKSPACE_ID=$(python - <<PY
+          WORKSPACE_ID=$(python - <<'PY'
 import json,sys
 print(json.load(open('workspace-artifacts/workspace-${SANITIZED_NAME}.json')).get('workspace_id',''))
 PY
@@ -330,7 +333,7 @@ PY
       - name: Expose merged summary (small) as job output
         id: set-summary
         run: |
-          summary=$(python - <<PY
+          summary=$(python - <<'PY'
 import json
 s=json.load(open('out/workspaces_summary.json'))
 print(json.dumps({"controller_id": s.get("controller",{}).get("workspace_id",""), "workspace_count": len(s.get("workspaces",[]))}))
@@ -359,7 +362,7 @@ PY
 
       - name: Example: read summary in Python and iterate
         run: |
-          python - <<PY
+          python - <<'PY'
 import json
 s = json.load(open('./artifacts/workspaces_summary.json'))
 print("Controller:", s.get("controller"))
