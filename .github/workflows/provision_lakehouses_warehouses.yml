@@ -53,4 +53,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bff-resources
-          path: .state/*.json
+          path: |
+            .state
+            .state/*.json
