@@ -36,12 +36,6 @@ jobs:
         run: |
           python ./scripts/provision_lakehouses_warehouses.py
 
-      - name: Upload resource artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: bff-resources
-          path: .state/**
-
       - name: Show .state contents (debug)
         run: |
           echo "Contents of .state:"
@@ -50,3 +44,10 @@ jobs:
             echo "---- $f ----"
             cat "$f"
           done
+
+      - name: Upload resource artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bff-resources
+          path: .state/**
+
