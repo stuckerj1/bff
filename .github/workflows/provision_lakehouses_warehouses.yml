@@ -12,29 +12,29 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install dependencies
         run: python -m pip install requests
 
-      - name: Download workspaces summary artifact
-        uses: actions/download-artifact@v4
+      - name: Download workspaces summary artifact into .state
+        uses: dawidd6/action-download-artifact@v2
         with:
+          workflow: provision_workspaces.yml
           name: bff-workspaces-summary
-          path: ./artifacts
+          path: .state
+          workflow_conclusion: success
+          branch: main
 
       - name: Run provisioning script
         env:
           TENANT_ID: ${{ secrets.TENANT_ID }}
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-          FABRIC_API_TOKEN: ${{ secrets.FABRIC_API_TOKEN }}
-          CAPACITY_ID: ${{ secrets.CAPACITY_ID }}
-          ADMIN_OBJECT_ID: ${{ secrets.ADMIN_OBJECT_ID }}
         run: |
-          python ./scripts/provision_lakehouses_warehouses.py --summary-glob './artifacts/**/workspaces_summary.json' --output-dir .state
+          python ./scripts/provision_lakehouses_warehouses.py
 
       - name: Upload resource artifacts
         uses: actions/upload-artifact@v4
