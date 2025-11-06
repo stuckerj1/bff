@@ -1,0 +1,63 @@
+# TESTING Parameter/config file for BFF benchmarks
+# - "datasets" defines canonical dataset sizes and generation params
+# - "parameter_sets" defines workspaces that reference datasets by name
+#
+# Recommended location: config/parameter_sets.yaml (keeps CI/workflow files separate)
+#
+# Important: change_fraction, new_fraction, delete_fraction are FRACTIONS (e.g. 0.01 = 1%), not percentages.
+
+datasets:
+  - name: "10k"
+    row_count: 10000
+    change_fraction: 0.01   # fraction of rows to change (1% -> 0.01)
+    new_fraction: 0.005     # fraction of new rows to insert
+    delete_fraction: 0.001  # fraction of rows to delete
+    seed: 42
+    description: "Small baseline dataset (10k rows)"
+
+  - name: "1m"
+    row_count: 1000000
+    change_fraction: 0.01
+    new_fraction: 0.005
+    delete_fraction: 0.001
+    seed: 42
+    description: "Scale test dataset (1M rows)"
+
+parameter_sets:
+  - name: "BFF 10k LH to Delta Full Refresh"
+    dataset_name: "10k"
+    source: "lakehouse"            # lakehouse | sql
+    format: "delta"                # delta | warehouse
+    update_strategy: "Full Refresh"
+    notes: "Baseline 10k full refresh lakehouse -> delta"
+    run_order:
+      - generate_data
+      - ingest_data
+      - apply_updates
+      - run_queries
+
+  - name: "BFF 10k LH to WH Full Compare"
+    dataset_name: "10k"
+    source: "lakehouse"
+    format: "warehouse"
+    update_strategy: "Full Compare"
+    notes: "10k Full Compare (Warehouse)"
+    run_order:
+      - generate_data
+      - ingest_data
+      - apply_updates
+      - run_queries
+
+  - name: "BFF 1M LH to WH Increment"
+    dataset_name: "1m"
+    source: "lakehouse"
+    format: "warehouse"
+    update_strategy: "Full Refresh"
+    notes: "Scale test 1M rows"
+    run_order:
+      - generate_data
+      - ingest_data
+      - apply_updates
+      - run_queries
+
+# Add more parameter_sets referencing dataset_name: e.g. a SQL-source variant, different update strategies, etc.
