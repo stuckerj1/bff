@@ -1,15 +1,11 @@
 # Provision BFF Controller and Action Workspaces (test parameter sets)
 # - Reads config/test_parameter_sets.yml
 # - Builds/validates a matrix and uploads matrix.json artifact
-# - Calls tools/provision_workspace.py to create the BFF Controller workspace (writes controller.json)
-# - Calls tools/provision_workspace.py for each action workspace (writes workspace-<sanitized>.json)
+# - Calls scripts/provision_workspace.py to create the BFF Controller workspace (writes controller.json)
+# - Calls scripts/provision_workspace.py for each action workspace (writes workspace-<sanitized>.json)
 # - Uploads per-workspace artifacts and assembles a summary (workspaces_summary.json)
 #
-# NOTE:
-# - This variant uses the existing FabricBenchmarkingProvisioner secrets (TENANT_ID, CLIENT_ID, CLIENT_SECRET, CAPACITY_ID, ADMIN_OBJECT_ID)
-#   and passes them into the script steps via environment variables (as you requested).
-# - If tools/provision_workspace.py needs az CLI authentication, ensure it consumes the provided env vars to create its own token
-#   (or add an azure/login step that uses AZURE_CREDENTIALS).
+# This version fixes a YAML syntax issue and ensures requests is installed before running the script.
 name: Provision BFF Controller and Action Workspaces (test parameter sets)
 
 on:
@@ -143,6 +139,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Ensure requests installed
+        run: python -m pip install requests
+
       - name: Provision Controller workspace via script
         id: provision-controller
         env:
@@ -155,19 +154,19 @@ jobs:
           ADMIN_OBJECT_ID: ${{ secrets.ADMIN_OBJECT_ID }}
         run: |
           set -euo pipefail
-          echo "Calling tools/provision_workspace.py to provision Controller '${CONTROLLER_NAME}'"
-          mkdir -p ./controller-artifacts
-          # The script should read credentials from environment or accept CLI args; do not print secrets
-          python ./tools/provision_workspace.py \
+          echo "Calling scripts/provision_workspace.py to provision Controller '${CONTROLLER_NAME}'"
+          mkdir -p controller-artifacts
+          # call script; it must write controller JSON to the given --output
+          python ./scripts/provision_workspace.py \
             --workspace-name "${CONTROLLER_NAME}" \
             --sanitized-name "bff-controller" \
             --output ./controller-artifacts/controller.json
           echo "Controller provisioning script completed. controller.json:"
           cat ./controller-artifacts/controller.json || true
-          # extract workspace_id using python (avoid jq dependency)
+          # extract workspace_id using python to avoid jq dependency
           CONTROLLER_ID=$(python - <<PY
-import json
-print(json.load(open('controller-artifacts/controller.json'))['workspace_id'])
+import json,sys
+print(json.load(open('controller-artifacts/controller.json')).get('workspace_id',''))
 PY
 )
           echo "CONTROLLER_ID=${CONTROLLER_ID}" >> $GITHUB_ENV
@@ -198,6 +197,9 @@ PY
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+
+      - name: Ensure requests installed
+        run: python -m pip install requests
 
       - name: Debug matrix entry
         run: |
@@ -240,9 +242,9 @@ PY
           ADMIN_OBJECT_ID: ${{ secrets.ADMIN_OBJECT_ID }}
         run: |
           set -euo pipefail
-          mkdir -p ./workspace-artifacts
-          echo "Calling tools/provision_workspace.py to provision action workspace '${WORKSPACE_NAME}' (sanitized: ${SANITIZED_NAME})"
-          python ./tools/provision_workspace.py \
+          mkdir -p workspace-artifacts
+          echo "Calling scripts/provision_workspace.py to provision action workspace '${WORKSPACE_NAME}' (sanitized: ${SANITIZED_NAME})"
+          python ./scripts/provision_workspace.py \
             --workspace-name "${WORKSPACE_NAME}" \
             --sanitized-name "${SANITIZED_NAME}" \
             --dataset-name "${DATASET_NAME}" \
@@ -252,12 +254,11 @@ PY
             --update-strategy "${UPDATE_STRATEGY}" \
             --output "./workspace-artifacts/workspace-${SANITIZED_NAME}.json"
           echo "Provision script completed. workspace artifact:"
-          cat ./workspace-artifacts/workspace-${SANITIZED_NAME}.json || true
+          cat "./workspace-artifacts/workspace-${SANITIZED_NAME}.json" || true
           # extract workspace_id into GITHUB_ENV
           WORKSPACE_ID=$(python - <<PY
-import json
-obj = json.load(open('workspace-artifacts/workspace-${SANITIZED_NAME}.json'))
-print(obj.get('workspace_id',''))
+import json,sys
+print(json.load(open('workspace-artifacts/workspace-${SANITIZED_NAME}.json')).get('workspace_id',''))
 PY
 )
           echo "WORKSPACE_ID=${WORKSPACE_ID}" >> $GITHUB_ENV
