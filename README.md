@@ -58,7 +58,22 @@ flowchart LR
   - Provide a unique server name and database name (e.g., benchmarking).
   - Enable `Allow Azure services and resources to access this server`.
   - Make yourself an admin on the server.
-  - Add `FabricBenchmarkingProvisioner` to the `SQL Server Contributor` role.
+  - Grant `FabricBenchmarkingProvisioner` permissions using the following SQL code in `Query editor (preview)`.
+     
+```
+-- create a contained user that maps to the service principal
+CREATE USER [FabricBenchmarkingProvisioner] FROM EXTERNAL PROVIDER;
+
+-- Data-plane roles for ingestion & metrics
+ALTER ROLE db_datareader ADD MEMBER [FabricBenchmarkingProvisioner];
+ALTER ROLE db_datawriter ADD MEMBER [FabricBenchmarkingProvisioner];
+
+-- The SP needs to create tables/schemas during seeding:
+ALTER ROLE db_ddladmin ADD MEMBER [FabricBenchmarkingProvisioner];
+
+-- (temporary/testing only) full DB control:
+-- ALTER ROLE db_owner ADD MEMBER [FabricBenchmarkingProvisioner];
+```
 
 - [ ] Run GitHub Actions workflow: `Provision Fabric Benchmarking Workspace`
 
