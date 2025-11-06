@@ -85,12 +85,23 @@ def create_warehouse(session: requests.Session, token: str, workspace_id: str, d
         payload["capacityId"] = capacity_id
     print(f"POST {url} -> {display_name}")
     r = session.post(url, headers=headers, json=payload, timeout=60)
+
+    # Debug: show status and a short preview of body
+    body_preview = (r.text[:1000] + "...") if r.text and len(r.text) > 1000 else (r.text or "")
+    print(f"  Response {r.status_code}: {body_preview}")
+
     # Accept 201 (created) or 202 (accepted async). Fail on other non-2xx.
     if 200 <= r.status_code < 300:
         try:
-            return r.json()
+            parsed = r.json()
         except Exception:
-            return {"raw_text": r.text}
+            # If the response isn't valid JSON, return raw text and status
+            return {"raw_text": r.text or "", "status": r.status_code}
+        # If parsed JSON is None (e.g. server returned literal "null"), return a dict instead of None
+        if parsed is None:
+            return {"raw_text": r.text or "", "status": r.status_code}
+        return parsed
+
     if r.status_code == 202:
         # Poll until the warehouse appears in GET /workspaces/{workspace_id}/warehouses
         print(f"Warehouse creation accepted (202). Polling for availability (every {poll_interval}s, up to {poll_attempts} attempts)...")
@@ -98,6 +109,7 @@ def create_warehouse(session: requests.Session, token: str, workspace_id: str, d
         for attempt in range(1, poll_attempts + 1):
             time.sleep(poll_interval)
             pr = session.get(poll_url, headers=headers, timeout=30)
+            print(f"  Poll {attempt}: GET {poll_url} -> {pr.status_code}")
             if pr.status_code == 200:
                 try:
                     val = pr.json().get("value", [])
@@ -109,6 +121,7 @@ def create_warehouse(session: requests.Session, token: str, workspace_id: str, d
                         return wh
             print(f"Poll {attempt}/{poll_attempts}: {display_name} not available yet.")
         die(f"Warehouse {display_name} not found after polling (workspace {workspace_id}).")
+
     # otherwise error
     die(f"Create warehouse '{display_name}' failed: {r.status_code} {r.text}")
 
@@ -166,6 +179,7 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
+
 
 
 
