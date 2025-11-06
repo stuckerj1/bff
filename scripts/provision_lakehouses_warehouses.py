@@ -2,21 +2,12 @@
 """
 Provision Metrics / Benchmark lakehouses and warehouses.
 
-Minimal, deterministic implementation intended to restore the previous working
-behavior with as little change as possible.
-
-Behavior:
-- Expects the merged workspaces_summary.json to be downloaded by the workflow
-  into ./artifacts/bff-workspaces-summary/workspaces_summary.json (what
-  actions/download-artifact writes when the artifact name is
-  `bff-workspaces-summary` and path is `./artifacts`).
-- Uses client-credentials auth ONLY (TENANT_ID/CLIENT_ID/CLIENT_SECRET required).
-- Creates a MetricsLakehouse in the controller workspace.
-- For each action workspace creates:
-    - BenchmarkLakehouse-<workspace_name_or_sanitized_name>
-    - BenchmarkWarehouse-<workspace_name_or_sanitized_name>
-- Writes one JSON file per created resource into the output directory (default .state).
-- Fails loudly on any unexpected condition.
+Minimal deterministic behavior aligned to your updated artifact location:
+- Expects merged summary at .state/bff-workspaces-summary.json by default.
+- Uses client-credentials auth only (TENANT_ID/CLIENT_ID/CLIENT_SECRET).
+- Creates MetricsLakehouse in controller and BenchmarkLakehouse / BenchmarkWarehouse
+  for each workspace listed in the summary.
+- Writes per-resource JSON files into the output directory (default: .state).
 """
 from __future__ import annotations
 import argparse
@@ -38,10 +29,6 @@ def die(msg: str, code: int = 1):
     sys.exit(code)
 
 def get_token_via_client_credentials() -> str:
-    """
-    Strict client-credentials flow only. This intentionally does NOT consult
-    alternative token env vars to avoid extra branches.
-    """
     tenant = os.environ.get("TENANT_ID")
     client = os.environ.get("CLIENT_ID")
     secret = os.environ.get("CLIENT_SECRET")
@@ -61,7 +48,7 @@ def get_token_via_client_credentials() -> str:
 
 def write_state(output_dir: str, resource_kind: str, display_name: str, workspace_id: str, resp: dict):
     os.makedirs(output_dir, exist_ok=True)
-    # Keep filename logic simple and predictable (replace path separators and spaces)
+    # simple, predictable filename: replace path separators and spaces
     fname_comp = str(display_name).replace(os.path.sep, "_").replace(" ", "-")
     fname = os.path.join(output_dir, f"{resource_kind}-{fname_comp}.json")
     out = {
@@ -125,48 +112,19 @@ def create_warehouse(session: requests.Session, token: str, workspace_id: str, d
     # otherwise error
     die(f"Create warehouse '{display_name}' failed: {r.status_code} {r.text}")
 
-def find_summary_path() -> str:
-    """
-    Deterministic lookup: expect the workflow to have placed the artifact at:
-      ./artifacts/bff-workspaces-summary/workspaces_summary.json
-
-    If that exact path is not present, fail with a clear message explaining the expected location.
-    """
-    expected = "./artifacts/bff-workspaces-summary/workspaces_summary.json"
-    if os.path.exists(expected):
-        print(f"Using summary file: {expected}")
-        return expected
-    # also accept a direct ./artifacts/workspaces_summary.json if your workflow downloaded differently
-    alt = "./artifacts/workspaces_summary.json"
-    if os.path.exists(alt):
-        print(f"Using summary file: {alt}")
-        return alt
-    die(
-        "workspaces_summary.json not found at the expected artifact path.\n"
-        "Expected: ./artifacts/bff-workspaces-summary/workspaces_summary.json (when using download-artifact with name: bff-workspaces-summary and path: ./artifacts)\n"
-        "Or: ./artifacts/workspaces_summary.json if your download put files directly under ./artifacts.\n"
-        "Please ensure the assemble-workspaces job uploaded the artifact using exactly:\n"
-        "  uses: actions/upload-artifact@v4\n"
-        "  with:\n"
-        "    name: bff-workspaces-summary\n"
-        "    path: path/to/workspaces_summary.json\n"
-        "and the provisioning job downloads it with:\n"
-        "  uses: actions/download-artifact@v4\n"
-        "  with:\n"
-        "    name: bff-workspaces-summary\n"
-        "    path: ./artifacts\n"
-    )
-
 def main(argv=None):
     p = argparse.ArgumentParser()
-    p.add_argument("--summary-path", default=None, help="Direct path to workspaces_summary.json (overrides expected artifact location)")
+    p.add_argument("--summary-path", default=".state/bff-workspaces-summary.json", help="Path to merged workspaces summary JSON (default: .state/bff-workspaces-summary.json)")
     p.add_argument("--output-dir", default=".state", help="Directory to write per-resource JSON files")
     p.add_argument("--capacity-id", default=None, help="Optional capacity id to include in resource create payloads (falls back to CAPACITY_ID env)")
     p.add_argument("--poll-interval", type=int, default=5, help="Seconds between warehouse availability polls")
     p.add_argument("--poll-attempts", type=int, default=12, help="Number of polls for warehouse creation")
     args = p.parse_args(argv)
 
-    summary_path = args.summary_path or find_summary_path()
+    summary_path = args.summary_path
+    if not os.path.exists(summary_path):
+        die(f"workspaces summary not found at expected path: {summary_path}\nEnsure the assemble job wrote the merged summary to this path and that the provisioning job downloads/places it there (example: .state/bff-workspaces-summary.json)")
+
     summary = json.load(open(summary_path, "r", encoding="utf-8"))
     controller = summary.get("controller") or {}
     workspaces = summary.get("workspaces", [])
