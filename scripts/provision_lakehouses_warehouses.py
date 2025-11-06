@@ -149,12 +149,12 @@ def main(argv=None):
             continue
         # Use provided sanitized_name if present, else use workspace_name as-is
         sname = ws.get("sanitized_name") or ws.get("workspace_name") or wid
-        lh_name = f"BenchmarkLakehouse-{sname}"
+        lh_name = "BenchmarkLakehouse"
         print(f"Creating {lh_name} in {wid}")
         resp_lh = create_lakehouse(session, token, wid, lh_name, capacity_id=capacity_id)
         write_state(args.output_dir, "lakehouse", lh_name, wid, resp_lh)
 
-        wh_name = f"BenchmarkWarehouse-{sname}"
+        wh_name = "BenchmarkWarehouse"
         print(f"Creating {wh_name} in {wid}")
         resp_wh = create_warehouse(session, token, wid, wh_name, capacity_id=capacity_id, poll_interval=args.poll_interval, poll_attempts=args.poll_attempts)
         write_state(args.output_dir, "warehouse", wh_name, wid, resp_wh)
@@ -164,3 +164,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
+
