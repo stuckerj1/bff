@@ -3,7 +3,7 @@
 # - Builds/validates a matrix and uploads matrix.json artifact
 # - Calls scripts/provision_workspace.py to create the BFF Controller workspace (writes .state/controller.json)
 # - Calls scripts/provision_workspace.py for each action workspace (writes .state/workspace-<sanitized>.json)
-# - Uploads per-workspace artifacts and assembles a summary (.state/workspaces_summary.json)
+# - Uploads per-workspace artifacts and assembles a summary (.state/bff-workspaces-summary.json)
 #
 # Notes:
 # - Ensures requests is installed before running the script.
@@ -107,7 +107,7 @@ jobs:
           matrix_json = json.dumps(matrix)
 
           # write matrix.json for artifact upload
-          with open('matrix.json', 'w', encoding='utf-8') as f:
+          with open('.state/bff-matrix.json', 'w', encoding='utf-8') as f:
               f.write(matrix_json)
 
           # Write to GITHUB_OUTPUT for downstream strategy.matrix consumption
@@ -124,7 +124,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bff-matrix
-          path: matrix.json
+          path: .state/bff-matrix.json
 
   provision-controller:
     name: Provision BFF Controller workspace (single)
@@ -171,7 +171,7 @@ jobs:
       - name: Upload controller artifact
         uses: actions/upload-artifact@v4
         with:
-          name: controller-workspace
+          name: controller
           path: .state/controller.json
 
       - name: Set controller id output
@@ -283,7 +283,7 @@ jobs:
           # show any workspace-*.json found anywhere under the extracted artifacts
           find ./artifacts -type f -name "workspace-*.json" -print -exec sh -c 'echo "---- {} ----"; cat "{}"' \; || true
 
-      - name: Merge artifacts into .state/workspaces_summary.json
+      - name: Merge artifacts into .state/bff-workspaces-summary.json
         run: |
           python - <<'PY'
           import json, glob, os
@@ -329,9 +329,9 @@ jobs:
                   print("Failed to read workspace candidate", p, e)
 
           os.makedirs('.state', exist_ok=True)
-          with open('.state/workspaces_summary.json','w',encoding='utf-8') as fh:
+          with open('.state/bff-workspaces-summary.json','w',encoding='utf-8') as fh:
               json.dump(out, fh, indent=2)
-          print("Wrote .state/workspaces_summary.json with", len(out["workspaces"]), "workspaces")
+          print("Wrote .state/bff-workspaces-summary.json with", len(out["workspaces"]), "workspaces")
           PY
         shell: bash
 
@@ -339,16 +339,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bff-workspaces-summary
-          path: .state/workspaces_summary.json
+          path: .state/bff-workspaces-summary.json
 
       - name: Expose merged summary (small) as job output
         id: set-summary
         run: |
           # guard against controller being present but set to None
           summary=$(
-            python -c "import json,sys; s=json.load(open('.state/workspaces_summary.json')); c=(s.get('controller') or {}); print(json.dumps({'controller_id': c.get('workspace_id',''), 'workspace_count': len(s.get('workspaces',[]))}))"
+            python -c "import json,sys; s=json.load(open('.state/bff-workspaces-summary.json')); c=(s.get('controller') or {}); print(json.dumps({'controller_id': c.get('workspace_id',''), 'workspace_count': len(s.get('workspaces',[]))}))"
           )
-          echo "workspaces_summary=${summary}" >> $GITHUB_OUTPUT
+          echo "bff-workspaces-summary=${summary}" >> $GITHUB_OUTPUT
         shell: bash
 
   orchestration:
@@ -369,13 +369,13 @@ jobs:
         run: |
           echo "Summary contents:"
           # find and show the merged summary in whichever artifact dir it was placed
-          find ./artifacts -type f -name "workspaces_summary.json" -print -exec sh -c 'echo "---- {} ----"; cat "{}"' \; || true
+          find ./artifacts -type f -name "bff-workspaces-summary.json" -print -exec sh -c 'echo "---- {} ----"; cat "{}"' \; || true
 
       - name: Example read summary in Python and iterate
         run: |
           python - <<'PY'
           import json, glob
-          files = glob.glob('./artifacts/**/workspaces_summary.json', recursive=True)
+          files = glob.glob('./artifacts/**/bff-workspaces-summary.json', recursive=True)
           if files:
               s = json.load(open(files[0], 'r', encoding='utf-8'))
           else:
