@@ -34,8 +34,8 @@ How to use (high level)
 
 How metrics are written (recommended models)
 - Recommended (Direct-write, simpler):
-  - Each action workspace is given write access to a shared `BenchmarkLakehouse.metrics` table (grant the single credential write access).
-  - Action notebooks append their run metrics directly to `BenchmarkLakehouse.metrics` (e.g., `spark.createDataFrame(...).write.mode('append').saveAsTable('BenchmarkLakehouse.metrics')`).
+  - Each action workspace is given write access to a shared `MetricsLakehouse.metrics` table (grant the single credential write access).
+  - Action notebooks append their run metrics directly to `MetricsLakehouse.metrics` (e.g., `spark.createDataFrame(...).write.mode('append').saveAsTable('MetricsLakehouse.metrics')`).
   - Controller reads this central table for visualization and/or archives periodic snapshots to ADLS.
   - Note: ensure the credential used by actions has permission to write to the metrics table.
 
@@ -100,10 +100,10 @@ change_fraction = float(params.get('change_fraction', dataset_cfg.get('change_fr
 # ... read other params similarly
 ```
 
-Dry-run and rollout recommendation
+Rollout recommendation
 - Start with a single parameter_set (10k full refresh). Confirm:
   - GenerateData creates base & updates in the Controller's DataSourceLakehouse and the SQL schema if `source: sql`.
-  - IngestData and ApplyUpdates run successfully and write metrics to `BenchmarkLakehouse.metrics`.
+  - IngestData and ApplyUpdates run successfully and write metrics to `MetricsLakehouse.metrics`.
   - The Controller can read/aggregate metrics and (optionally) archive to ADLS.
 - Once validated, expand to additional parameter_sets and scale up to 1M runs with controlled concurrency.
 
@@ -111,7 +111,7 @@ Checklist before running large-scale jobs
 - [ ] config/parameter_sets.yaml validated and present in repo
 - [ ] Credentials (service principal / secrets) in place and documented
 - [ ] Action workspaces provisioned with the required notebooks and dataset shortcuts
-- [ ] BenchmarkLakehouse.metrics accessible and writable by the credential
+- [ ] MetricsLakehouse.metrics accessible and writable by the credential
 - [ ] Dry-run validated (10k)
 - [ ] Cost and quota limits reviewed
 
