@@ -297,32 +297,32 @@ PY
 
       - name: Merge artifacts into workspaces_summary.json
         run: |
-          python - <<PY
-import json, glob, os
-out = {"controller": None, "workspaces": []}
-# find controller artifact
-for p in glob.glob("artifacts/**/controller.json", recursive=True):
-    try:
-        out["controller"] = json.load(open(p))
-    except Exception as e:
-        print("Failed to read", p, e)
-# find per-workspace jsons
-seen = set()
-for p in glob.glob("artifacts/**/workspace-*.json", recursive=True):
-    try:
-        j = json.load(open(p))
-        key = j.get('workspace_id') or j.get('sanitized_name') or json.dumps(j)
-        if key in seen:
-            continue
-        seen.add(key)
-        out["workspaces"].append(j)
-    except Exception as e:
-        print("Failed to read", p, e)
-os.makedirs('out', exist_ok=True)
-with open('out/workspaces_summary.json','w',encoding='utf-8') as fh:
-    json.dump(out, fh, indent=2)
-print("Wrote out/workspaces_summary.json with", len(out["workspaces"]), "workspaces")
-PY
+          python - <<'PY'
+          import json, glob, os
+          out = {"controller": None, "workspaces": []}
+          # find controller artifact
+          for p in glob.glob("artifacts/**/controller.json", recursive=True):
+              try:
+                  out["controller"] = json.load(open(p))
+              except Exception as e:
+                  print("Failed to read", p, e)
+          # find per-workspace jsons
+          seen = set()
+          for p in glob.glob("artifacts/**/workspace-*.json", recursive=True):
+              try:
+                  j = json.load(open(p))
+                  key = j.get('workspace_id') or j.get('sanitized_name') or json.dumps(j)
+                  if key in seen:
+                      continue
+                  seen.add(key)
+                  out["workspaces"].append(j)
+              except Exception as e:
+                  print("Failed to read", p, e)
+          os.makedirs('out', exist_ok=True)
+          with open('out/workspaces_summary.json','w',encoding='utf-8') as fh:
+              json.dump(out, fh, indent=2)
+          print("Wrote out/workspaces_summary.json with", len(out["workspaces"]), "workspaces")
+          PY
 
       - name: Upload merged summary artifact
         uses: actions/upload-artifact@v4
@@ -334,10 +334,10 @@ PY
         id: set-summary
         run: |
           summary=$(python - <<'PY'
-import json
-s=json.load(open('out/workspaces_summary.json'))
-print(json.dumps({"controller_id": s.get("controller",{}).get("workspace_id",""), "workspace_count": len(s.get("workspaces",[]))}))
-PY
+          import json
+          s=json.load(open('out/workspaces_summary.json'))
+          print(json.dumps({"controller_id": s.get("controller",{}).get("workspace_id",""), "workspace_count": len(s.get("workspaces",[]))}))
+          PY
 )
           echo "workspaces_summary=${summary}" >> $GITHUB_OUTPUT
 
@@ -363,9 +363,9 @@ PY
       - name: Example: read summary in Python and iterate
         run: |
           python - <<'PY'
-import json
-s = json.load(open('./artifacts/workspaces_summary.json'))
-print("Controller:", s.get("controller"))
-for ws in s.get("workspaces", []):
-    print("Workspace:", ws.get("workspace_name"), "id:", ws.get("workspace_id"))
-PY
+          import json
+          s = json.load(open('./artifacts/workspaces_summary.json'))
+          print("Controller:", s.get("controller"))
+          for ws in s.get("workspaces", []):
+              print("Workspace:", ws.get("workspace_name"), "id:", ws.get("workspace_id"))
+          PY
