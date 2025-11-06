@@ -127,7 +127,7 @@ jobs:
           path: matrix.json
 
   provision-controller:
-    name: Provision BFF-Controller workspace (single)
+    name: Provision BFF Controller workspace (single)
     runs-on: ubuntu-latest
     needs: gen-matrix
     outputs:
@@ -147,7 +147,7 @@ jobs:
       - name: Provision Controller workspace via script
         id: provision-controller
         env:
-          CONTROLLER_NAME: "BFF-Controller"
+          CONTROLLER_NAME: "BFF Controller"
           # pass the existing FabricBenchmarkingProvisioner secrets into the script
           TENANT_ID: ${{ secrets.TENANT_ID }}
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
