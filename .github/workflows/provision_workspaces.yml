@@ -1,14 +1,13 @@
 # Provision BFF Controller and Action Workspaces (test parameter sets)
 # - Reads config/test_parameter_sets.yml
 # - Builds/validates a matrix and uploads matrix.json artifact
-# - Calls scripts/provision_workspace.py to create the BFF Controller workspace (writes controller.json)
-# - Calls scripts/provision_workspace.py for each action workspace (writes workspace-<sanitized>.json)
-# - Uploads per-workspace artifacts and assembles a summary (workspaces_summary.json)
+# - Calls scripts/provision_workspace.py to create the BFF Controller workspace (writes .state/controller.json)
+# - Calls scripts/provision_workspace.py for each action workspace (writes .state/workspace-<sanitized>.json)
+# - Uploads per-workspace artifacts and assembles a summary (.state/workspaces_summary.json)
 #
 # Notes:
 # - Ensures requests is installed before running the script.
 # - Uses one-line python -c invocations for small extractions to avoid heredoc/indentation pitfalls that can break YAML parsing.
-# - For initial testing you can temporarily add --dry-run to the script invocations so nothing is created in Fabric.
 name: Provision BFF Controller and Action Workspaces (test parameter sets)
 
 on:
@@ -158,14 +157,14 @@ jobs:
         run: |
           set -euo pipefail
           echo "Calling scripts/provision_workspace.py to provision Controller '${CONTROLLER_NAME}'"
-          mkdir -p controller-artifacts
-          # call script; it must write controller JSON to the given --output (do not include trailing backslashes)
-          python ./scripts/provision_workspace.py --workspace-name "${CONTROLLER_NAME}" --sanitized-name "bff-controller" --output ./controller-artifacts/controller.json
-          echo "Controller provisioning script completed. controller.json:"
-          cat ./controller-artifacts/controller.json || true
+          mkdir -p .state
+          # call script; it must write controller JSON to the given --output (no trailing backslashes)
+          python ./scripts/provision_workspace.py --workspace-name "${CONTROLLER_NAME}" --sanitized-name "bff-controller" --output .state/controller.json
+          echo "Controller provisioning script completed. .state/controller.json:"
+          cat .state/controller.json || true
           # extract workspace_id using a one-line python -c to avoid heredoc/indentation issues
           CONTROLLER_ID=$(
-            python -c "import json,sys;print(json.load(open('controller-artifacts/controller.json')).get('workspace_id',''))"
+            python -c "import json,sys;print(json.load(open('.state/controller.json')).get('workspace_id',''))"
           )
           echo "CONTROLLER_ID=${CONTROLLER_ID}" >> $GITHUB_ENV
 
@@ -173,7 +172,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: controller-workspace
-          path: controller-artifacts/controller.json
+          path: .state/controller.json
 
       - name: Set controller id output
         id: save-controller
@@ -241,15 +240,14 @@ jobs:
           ADMIN_OBJECT_ID: ${{ secrets.ADMIN_OBJECT_ID }}
         run: |
           set -euo pipefail
-          mkdir -p workspace-artifacts
+          mkdir -p .state
           echo "Calling scripts/provision_workspace.py to provision action workspace '${WORKSPACE_NAME}' (sanitized: ${SANITIZED_NAME})"
-          # call script; it must write a workspace JSON to the given --output (do not include trailing backslashes)
-          python ./scripts/provision_workspace.py --workspace-name "${WORKSPACE_NAME}" --sanitized-name "${SANITIZED_NAME}" --dataset-name "${DATASET_NAME}" --row-count "${ROW_COUNT}" --source "${SOURCE}" --format "${FORMAT}" --update-strategy "${UPDATE_STRATEGY}" --output "./workspace-artifacts/workspace-${SANITIZED_NAME}.json"
-          echo "Provision script completed. workspace artifact:"
-          cat "./workspace-artifacts/workspace-${SANITIZED_NAME}.json" || true
+          python ./scripts/provision_workspace.py --workspace-name "${WORKSPACE_NAME}" --sanitized-name "${SANITIZED_NAME}" --dataset-name "${DATASET_NAME}" --row-count "${ROW_COUNT}" --source "${SOURCE}" --format "${FORMAT}" --update-strategy "${UPDATE_STRATEGY}" --output ".state/workspace-${SANITIZED_NAME}.json"
+          echo "Provision script completed. .state/workspace-${SANITIZED_NAME}.json:"
+          cat ".state/workspace-${SANITIZED_NAME}.json" || true
           # extract workspace_id into GITHUB_ENV using one-line python -c (avoid heredoc)
           WORKSPACE_ID=$(
-            python -c "import json,sys;print(json.load(open('workspace-artifacts/workspace-${SANITIZED_NAME}.json')).get('workspace_id',''))"
+            python -c "import json,sys;print(json.load(open('.state/workspace-${SANITIZED_NAME}.json')).get('workspace_id',''))"
           )
           echo "WORKSPACE_ID=${WORKSPACE_ID}" >> $GITHUB_ENV
           echo "workspace_id=${WORKSPACE_ID}" >> $GITHUB_OUTPUT
@@ -259,7 +257,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: workspace-${{ matrix.sanitized_name }}
-          path: ./workspace-artifacts/workspace-${{ matrix.sanitized_name }}.json
+          path: .state/workspace-${{ matrix.sanitized_name }}.json
 
   assemble-workspaces:
     name: Assemble workspace ids and create summary
@@ -279,24 +277,24 @@ jobs:
           echo "Artifacts directory listing:"
           ls -la ./artifacts || true
           echo "Show controller artifact content (if present):"
-          find ./artifacts -type f -name "controller.json" -print -exec cat {} \; || true
+          find ./artifacts -type f -path "*/.state/controller.json" -print -exec cat {} \; || true
           echo "Show per-workspace artifacts:"
-          find ./artifacts -type f -name "workspace-*.json" -print -exec echo "---- {} ----" \; -exec cat {} \; || true
+          find ./artifacts -type f -path "*/.state/workspace-*.json" -print -exec echo "---- {} ----" \; -exec cat {} \; || true
 
-      - name: Merge artifacts into workspaces_summary.json
+      - name: Merge artifacts into .state/workspaces_summary.json
         run: |
           python - <<'PY'
           import json, glob, os
           out = {"controller": None, "workspaces": []}
           # find controller artifact
-          for p in glob.glob("artifacts/**/controller.json", recursive=True):
+          for p in glob.glob("artifacts/**/.state/controller.json", recursive=True):
               try:
                   out["controller"] = json.load(open(p))
               except Exception as e:
                   print("Failed to read", p, e)
           # find per-workspace jsons
           seen = set()
-          for p in glob.glob("artifacts/**/workspace-*.json", recursive=True):
+          for p in glob.glob("artifacts/**/.state/workspace-*.json", recursive=True):
               try:
                   j = json.load(open(p))
                   key = j.get('workspace_id') or j.get('sanitized_name') or json.dumps(j)
@@ -306,23 +304,23 @@ jobs:
                   out["workspaces"].append(j)
               except Exception as e:
                   print("Failed to read", p, e)
-          os.makedirs('out', exist_ok=True)
-          with open('out/workspaces_summary.json','w',encoding='utf-8') as fh:
+          os.makedirs('.state', exist_ok=True)
+          with open('.state/workspaces_summary.json','w',encoding='utf-8') as fh:
               json.dump(out, fh, indent=2)
-          print("Wrote out/workspaces_summary.json with", len(out["workspaces"]), "workspaces")
+          print("Wrote .state/workspaces_summary.json with", len(out["workspaces"]), "workspaces")
           PY
 
       - name: Upload merged summary artifact
         uses: actions/upload-artifact@v4
         with:
           name: bff-workspaces-summary
-          path: out/workspaces_summary.json
+          path: .state/workspaces_summary.json
 
       - name: Expose merged summary (small) as job output
         id: set-summary
         run: |
           summary=$(
-            python -c "import json,sys; s=json.load(open('out/workspaces_summary.json')); import json as _j; print(_j.dumps({'controller_id': s.get('controller',{}).get('workspace_id',''), 'workspace_count': len(s.get('workspaces',[]))}))"
+            python -c "import json,sys; s=json.load(open('.state/workspaces_summary.json')); import json as _j; print(_j.dumps({'controller_id': s.get('controller',{}).get('workspace_id',''), 'workspace_count': len(s.get('workspaces',[]))}))"
           )
           echo "workspaces_summary=${summary}" >> $GITHUB_OUTPUT
 
@@ -343,13 +341,17 @@ jobs:
       - name: Show summary
         run: |
           echo "Summary contents:"
-          cat ./artifacts/workspaces_summary.json || true
+          cat ./artifacts/**/.state/workspaces_summary.json || true
 
       - name: Example read summary in Python and iterate
         run: |
           python - <<'PY'
-          import json
-          s = json.load(open('./artifacts/workspaces_summary.json'))
+          import json, glob
+          files=glob.glob('./artifacts/**/.state/workspaces_summary.json', recursive=True)
+          if files:
+              s = json.load(open(files[0]))
+          else:
+              s = {"controller": None, "workspaces": []}
           print("Controller:", s.get("controller"))
           for ws in s.get("workspaces", []):
               print("Workspace:", ws.get("workspace_name"), "id:", ws.get("workspace_id"))
