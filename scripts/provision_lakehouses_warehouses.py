@@ -46,15 +46,15 @@ def get_token_via_client_credentials() -> str:
         die(f"Failed to obtain AAD token: {r.status_code} {r.text}")
     return r.json().get("access_token")
 
-def write_state(output_dir: str, resource_kind: str, display_name: str, workspace_id: str, resp: dict):
+def write_state(output_dir: str, resource_kind: str, workspace_name, sanitized_name: str, workspace_id: str, resp: dict):
     os.makedirs(output_dir, exist_ok=True)
-    # simple, predictable filename: replace path separators and spaces
-    fname_comp = str(display_name).replace(os.path.sep, "_").replace(" ", "-")
-    fname = os.path.join(output_dir, f"{resource_kind}-{fname_comp}.json")
+
+    fname = os.path.join(output_dir, f"{resource_kind}-{sanitized_name}.json")
     out = {
         "workspace_id": workspace_id,
         "resource_type": resource_kind,
-        "displayName": display_name,
+        "workspace_name": workspace_name,
+        "sanitized_name": sanitized_name,
         "timestamp_utc": now_iso(),
         "api_response": resp
     }
@@ -147,21 +147,24 @@ def main(argv=None):
         if not wid:
             print("Skipping workspace with no workspace_id:", ws.get("workspace_name"))
             continue
-        # Use provided sanitized_name if present, else use workspace_name as-is
-        sname = ws.get("sanitized_name") or ws.get("workspace_name") or wid
+        # Use sanitized_name (required). Let KeyError surface if it's missing.
+        sname = ws["sanitized_name"]
+        workspace_name = ws.get("workspace_name")
+
         lh_name = "BenchmarkLakehouse"
         print(f"Creating {lh_name} in {wid}")
         resp_lh = create_lakehouse(session, token, wid, lh_name, capacity_id=capacity_id)
-        write_state(args.output_dir, "lakehouse", lh_name, wid, resp_lh)
+        write_state(args.output_dir, "lakehouse", workspace_name, sname, wid, resp_lh)
 
         wh_name = "BenchmarkWarehouse"
         print(f"Creating {wh_name} in {wid}")
         resp_wh = create_warehouse(session, token, wid, wh_name, capacity_id=capacity_id, poll_interval=args.poll_interval, poll_attempts=args.poll_attempts)
-        write_state(args.output_dir, "warehouse", wh_name, wid, resp_wh)
+        write_state(args.output_dir, "warehouse", workspace_name, sname, wid, resp_wh)
 
     print("All resources created successfully.")
     return 0
 
 if __name__ == "__main__":
     sys.exit(main())
+
 
