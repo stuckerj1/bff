@@ -163,8 +163,8 @@ jobs:
           python ./scripts/provision_workspace.py \
             --workspace-name "${CONTROLLER_NAME}" \
             --sanitized-name "bff-controller" \
-            --output ./controller-artifacts/controller.json \
-            --dry-run
+            --output ./controller-artifacts/controller.json
+#            --dry-run
           echo "Controller provisioning script completed. controller.json:"
           cat ./controller-artifacts/controller.json || true
           # extract workspace_id using a one-line python -c to avoid heredoc/indentation issues
@@ -254,8 +254,8 @@ jobs:
             --source "${SOURCE}" \
             --format "${FORMAT}" \
             --update-strategy "${UPDATE_STRATEGY}" \
-            --output "./workspace-artifacts/workspace-${SANITIZED_NAME}.json" \
-            --dry-run
+            --output "./workspace-artifacts/workspace-${SANITIZED_NAME}.json"
+#            --dry-run
           echo "Provision script completed. workspace artifact:"
           cat "./workspace-artifacts/workspace-${SANITIZED_NAME}.json" || true
           # extract workspace_id into GITHUB_ENV using one-line python -c (avoid heredoc)
