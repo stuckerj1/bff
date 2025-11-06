@@ -1,0 +1,137 @@
+# BFF — Benchmarking Fabric Framework (refactor plan)
+
+This repo is being refactored to support running many parameterized benchmark workspaces so Fabric capacity/metrics can be captured per test configuration.
+
+TL;DR — approach
+- Use a parameter-sets YAML (config/parameter_sets.yaml) to declare the datasets and test combinations.
+- Each parameter set corresponds to one "actions" workspace where capacity metrics are most meaningful.
+- A central "Controller" workspace will run the controller_orchestrator notebook/script to launch the per-workspace runs in sequence.
+- Results (metrics table snapshot) are archived per parameter set into ADLS so the Controller workspace can visualize them centrally.
+
+What I added (templates)
+- config/parameter_sets.yaml — declare datasets and parameter sets (row_count, source, format, update_strategy, etc.).
+- notebooks/controller_orchestrator.ipynb / controller_orchestrator.py — synapse-friendly orchestrator to loop parameter sets and run the canonical notebooks.
+- Starter guidance and snippets to wire provisioning, orchestration, and visualization.
+
+Prerequisites
+- GitHub repo checked out in your Controller workspace (or make notebooks available in each actions workspace).
+- Azure credentials available for provisioning and workspace operations:
+  - Recommended: a single service principal or user credential used by the Controller and action workspaces (this repo assumes the same credentials are available in each workspace).
+  - In GitHub Actions: store as `AZURE_CREDENTIALS` (or AZ_CLIENT_ID / AZ_CLIENT_SECRET / AZ_TENANT_ID).
+- Fabric / Synapse permissions:
+  - The credential must be able to create or write to the BenchmarkLakehouse.metrics table (or the Controller must be able to aggregate metrics after runs).
+- ADLS location for archived metrics:
+  - Example: `abfss://FabricBenchmarking@onelake.dfs.fabric.microsoft.com/BFF-Results`
+- Optional: Azure SQL credentials if using `source: sql`.
+- Local tooling for CI (if using workflows): az CLI, Python (pyyaml), node/npm if you use doctoc etc.
+
+How to use (high level)
+1. Edit config/parameter_sets.yaml to add datasets and the parameter_sets (workspaces) you want to run.
+2. Provision the BFF Controller workspace (manual or automated).
+   - Generate synthetic data as specified in `datasets` (the Controller can seed both DataSourceLakehouse and external Azure SQL).
+   - Create a `MetricsLakehouse` (a lakehouse that will host the central metrics table) used by the Controller for aggregation/visualization.
+3. For each action workspace (workspace name = parameter_set.name), provision:
+   - The notebooks: `1.GenerateData`, `2.IngestData`, `3.ApplyUpdates`, `4.RunQueries`
+   - Data source: `DataSourceLakehouse` or `DataSource_Azure_SQL` as required by the parameter set
+   - Data destination: `BenchmarkLakehouse` (delta tables) or `BenchmarkWarehouse` (warehouse tables) depending on `format`
+4. In the BFF Controller workspace, run `notebooks/controller_orchestrator.py` (update `NOTEBOOK_PATHS` to refer to the notebook paths in the action workspaces). The orchestrator:
+   - Reads `config/parameter_sets.yaml`
+   - Merges dataset-level settings (row counts, fractions, seeds) with each parameter_set
+   - Calls each action workspace's notebooks (via `mssparkutils.notebook.run`) passing a params dict
+   - Archives a snapshot of `BenchmarkLakehouse.metrics` per run into ADLS for long-term analysis
+5. The Controller workspace hosts a visualization notebook that reads the central metrics table (or archived CSVs) to produce cross-workspace comparisons and capacity charts.
+
+How metrics are written (recommended models)
+- Recommended (Direct-write, simpler):
+  - Each action workspace is given write access to a shared `BenchmarkLakehouse.metrics` table (grant the single credential write access).
+  - Action notebooks append their run metrics directly to `BenchmarkLakehouse.metrics` (e.g., `spark.createDataFrame(...).write.mode('append').saveAsTable('BenchmarkLakehouse.metrics')`).
+  - Controller reads this central table for visualization and/or archives periodic snapshots to ADLS.
+  - Note: ensure the credential used by actions has permission to write to the metrics table.
+- Alternative (Controller aggregation):
+  - Action workspaces write a local metrics CSV to their workspace storage.
+  - Controller copies/ingests those CSV exports into the central `MetricsLakehouse` on a scheduled or manual cadence.
+  - Use this if you prefer not to grant write permissions to each action workspace on the central lakehouse.
+
+Important operational notes
+- Single credential assumption:
+  - You confirmed RBAC will not be an issue because you're using the same credentials everywhere. Document that service principal or user in your secrets and ensure it has the required Fabric/ADLS/SQL roles (write/read for metrics and data).
+- Capacity metrics latency:
+  - Fabric capacity metrics and the Capacity Metrics app may lag (commonly hours, sometimes visible the next day). Plan analysis windows and account for refresh delays when correlating capacity usage to immediate run timings.
+- Cost & concurrency:
+  - Large runs (1M datasets, multiple workspaces concurrently) can be expensive. Start with a dry-run (10k) and stagger or serialize runs for larger tests to avoid quota or cost surprises.
+- Naming & sanitization rules:
+  - Use the parameter_set `name` for the human workspace name.
+  - Generate a sanitized resource name for Azure resources using a deterministic function:
+    - Lowercase, spaces → -, remove characters not in [a-z0-9-], truncate to 40 chars.
+    - Example: `"BFF 10k LH to WH Full Refresh"` → `bff-10k-lh-to-wh-full-refresh`
+  - Use sanitized names for resource groups, storage folder names, and other Azure resource identifiers.
+- Dataset naming mapping:
+  - `datasets[].name` is the canonical dataset identifier used for:
+    - Lakehouse folder naming: `/Files/{dataset_name}base/` and `/Files/{dataset_name}updates/`
+    - Azure SQL schema/table prefixes: e.g., `bff_{dataset_name}` → tables `base_{dataset_name}`, `updates_{dataset_name}`
+
+Parameter validation (apply in matrix-builder / CI)
+- Validate for each `parameter_set`:
+  - `dataset_name` exists in `datasets`
+  - `source` is one of: `lakehouse`, `sql`
+  - `format` is one of: `delta`, `warehouse`
+  - `update_strategy` is one of: `Full Refresh`, `Full Compare`, `Incremental`
+  - Fractional values (from dataset): `0 < change_fraction < 1`, `0 <= new_fraction < 1`, `0 <= delete_fraction < 1`
+  - No duplicate `parameter_set.name` values
+- The matrix-builder script (tools/build_matrix_from_params.py) should produce `sanitized_name` and the JSON `matrix.include` for GitHub Actions.
+
+Example params dict passed from orchestrator to notebooks
+```
+{
+  "workspace_name": "BFF 10k LH to WH Full Refresh",
+  "sanitized_name": "bff-10k-lh-to-wh-full-refresh",
+  "dataset_name": "10k",
+  "row_count": "10000",
+  "source": "lakehouse",
+  "format": "warehouse",
+  "update_strategy": "Full Refresh",
+  "change_fraction": 0.01,
+  "new_fraction": 0.005,
+  "delete_fraction": 0.001,
+  "seed": 42
+}
+```
+
+Notebook header snippet (recommended cell to add to start of action notebooks)
+```python
+# Param handling (synapse_pyspark)
+import yaml, os
+try:
+    # When run via mssparkutils.notebook.run, params can be passed as a dict
+    params = mssparkutils.notebook.getContext().getInput('params') or {}
+except Exception:
+    params = {}
+
+cfg = yaml.safe_load(open('/workspace/config/parameter_sets.yaml', 'r', encoding='utf-8'))
+datasets = {d['name']: d for d in cfg.get('datasets', [])}
+dataset_cfg = datasets.get(params.get('dataset_name'), {})
+row_count = int(params.get('row_count', dataset_cfg.get('row_count', 10000)))
+change_fraction = float(params.get('change_fraction', dataset_cfg.get('change_fraction', 0.01)))
+# ... read other params similarly
+```
+
+Dry-run and rollout recommendation
+- Start with a single parameter_set (10k full refresh). Confirm:
+  - GenerateData creates base & updates in the Controller's DataSourceLakehouse and the SQL schema if `source: sql`.
+  - IngestData and ApplyUpdates run successfully and write metrics to `BenchmarkLakehouse.metrics`.
+  - The Controller can read/aggregate metrics and (optionally) archive to ADLS.
+- Once validated, expand to additional parameter_sets and scale up to 1M runs with controlled concurrency.
+
+Checklist before running large-scale jobs
+- [ ] config/parameter_sets.yaml validated and present in repo
+- [ ] Credentials (service principal / secrets) in place and documented
+- [ ] Action workspaces provisioned with the required notebooks and dataset shortcuts
+- [ ] BenchmarkLakehouse.metrics accessible and writable by the credential
+- [ ] Dry-run validated (10k)
+- [ ] Cost and quota limits reviewed
+
+Next steps (suggested)
+- If you want, I will:
+  - produce the small matrix-builder / validator script (tools/build_matrix_from_params.py) that emits the GH Actions matrix and validates the config, or
+  - produce the small GenerateData notebook header cell (to accept dataset params and write base/updates to lakehouse and SQL), or
+  - produce a sample provision_workspaces GitHub Actions workflow that consumes the matrix and runs a placeholder provisioning step.
