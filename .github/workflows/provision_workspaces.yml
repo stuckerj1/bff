@@ -7,7 +7,7 @@
 #
 # Notes:
 # - Ensures requests is installed before running the script.
-# - Uses safe one-line Python invocations (no heredoc) to extract workspace_id values to avoid shell/YAML heredoc pitfalls.
+# - Uses one-line python -c invocations for small extractions to avoid heredoc/indentation pitfalls that can break YAML parsing.
 # - First test runs should include --dry-run on the script invocations so nothing is created in Fabric.
 name: Provision BFF Controller and Action Workspaces (test parameter sets)
 
@@ -167,7 +167,7 @@ jobs:
             --dry-run
           echo "Controller provisioning script completed. controller.json:"
           cat ./controller-artifacts/controller.json || true
-          # extract workspace_id using a one-line python command (avoids heredoc issues)
+          # extract workspace_id using a one-line python -c to avoid heredoc/indentation issues
           CONTROLLER_ID=$(
             python -c "import json,sys;print(json.load(open('controller-artifacts/controller.json')).get('workspace_id',''))"
           )
@@ -258,7 +258,7 @@ jobs:
             --dry-run
           echo "Provision script completed. workspace artifact:"
           cat "./workspace-artifacts/workspace-${SANITIZED_NAME}.json" || true
-          # extract workspace_id into GITHUB_ENV using one-line python (avoids heredoc)
+          # extract workspace_id into GITHUB_ENV using one-line python -c (avoid heredoc)
           WORKSPACE_ID=$(
             python -c "import json,sys;print(json.load(open('workspace-artifacts/workspace-${SANITIZED_NAME}.json')).get('workspace_id',''))"
           )
@@ -295,7 +295,7 @@ jobs:
 
       - name: Merge artifacts into workspaces_summary.json
         run: |
-          python - <<PY
+          python - <<'PY'
           import json, glob, os
           out = {"controller": None, "workspaces": []}
           # find controller artifact
@@ -332,7 +332,7 @@ jobs:
         id: set-summary
         run: |
           summary=$(
-            python -c "import json,sys; s=json.load(open('out/workspaces_summary.json')); print(json.dumps({'controller_id': s.get('controller',{}).get('workspace_id',''), 'workspace_count': len(s.get('workspaces',[]))}))"
+            python -c "import json,sys; s=json.load(open('out/workspaces_summary.json')); import json as _j; print(_j.dumps({'controller_id': s.get('controller',{}).get('workspace_id',''), 'workspace_count': len(s.get('workspaces',[]))}))"
           )
           echo "workspaces_summary=${summary}" >> $GITHUB_OUTPUT
 
@@ -357,7 +357,7 @@ jobs:
 
       - name: Example: read summary in Python and iterate
         run: |
-          python - <<PY
+          python - <<'PY'
           import json
           s = json.load(open('./artifacts/workspaces_summary.json'))
           print("Controller:", s.get("controller"))
