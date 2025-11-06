@@ -40,7 +40,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bff-resources
-          path: .state
+          path: .state/**
 
       - name: Show .state contents (debug)
         run: |
