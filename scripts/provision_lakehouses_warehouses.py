@@ -139,7 +139,7 @@ def main(argv=None):
         die(f"controller.workspace_id missing in {summary_path}. Controller object: {controller}")
     print(f"Creating MetricsLakehouse in controller workspace {ctrl_id}")
     resp_metrics = create_lakehouse(session, token, ctrl_id, "MetricsLakehouse", capacity_id=capacity_id)
-    write_state(args.output_dir, "lakehouse-metrics", "MetricsLakehouse", ctrl_id, resp_metrics)
+    write_state(args.output_dir, "lakehouse-metrics", controller.get("workspace_name"), controller.get("sanitized_name"), ctrl_id, resp_metrics)
 
     # For each action workspace create BenchmarkLakehouse and BenchmarkWarehouse
     for ws in workspaces:
@@ -166,5 +166,6 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
+
 
 
