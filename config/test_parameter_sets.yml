@@ -31,19 +31,17 @@ parameter_sets:
     update_strategy: "Full Refresh"
     notes: "Baseline 10k full refresh lakehouse -> delta"
     run_order:
-      - generate_data
       - ingest_data
       - apply_updates
       - run_queries
 
-  - name: "BFF 10k LH to WH Full Compare"
+  - name: "BFF 10k SQL to WH Full Compare"
     dataset_name: "10k"
-    source: "lakehouse"
+    source: "sql"
     format: "warehouse"
     update_strategy: "Full Compare"
     notes: "10k Full Compare (Warehouse)"
     run_order:
-      - generate_data
       - ingest_data
       - apply_updates
       - run_queries
@@ -55,7 +53,6 @@ parameter_sets:
     update_strategy: "Full Refresh"
     notes: "Scale test 1M rows"
     run_order:
-      - generate_data
       - ingest_data
       - apply_updates
       - run_queries
