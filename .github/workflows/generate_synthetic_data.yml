@@ -28,11 +28,31 @@ jobs:
           workflow_conclusion: success
           branch: main
 
-      - name: Run generator
+##### Add notebooks_to_create parameter here, for example: ######
+#notebooks_to_create = [
+#    {
+#        "displayName": "0.GenerateData",
+#        "description": "Synthetic data generation",
+#        "file": "notebooks/generate_data.ipynb",
+#        "workspaces": ["BFF Controller"],
+#    }
+#]
+      - name: Provision notebook
         env:
           TENANT_ID: ${{ secrets.TENANT_ID }}
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+#notebooks_to_create        
+        run: |
+          python ./scripts/provision_notebooks.py
+
+      - name: Run notebook to generate synthetic data
+        env:
+          TENANT_ID: ${{ secrets.TENANT_ID }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          AZURE_SQL_SERVER: ${{ secrets.AZURE_SQL_SERVER }}
+          AZURE_SQL_DB: ${{ secrets.AZURE_SQL_DB }}
         run: |
           python ./scripts/generate_synthetic_data.py
 
