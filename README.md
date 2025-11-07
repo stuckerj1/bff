@@ -49,6 +49,8 @@ flowchart LR
   - `CLIENT_SECRET`  (create and immediately copy from Microsoft Entra > App registrations > FabricBenchmarkingProvisioner > Certificates & secrets > New client secret > BFF Client Secret)
   - `ADMIN_OBJECT_ID` (from Microsoft Entra > Users > [Select user] > Overview > Object ID)
   - `CAPACITY_ID` (from Fabric > Admin Portal > Capacity settings > Actions > [Select capacity, e.g. Trial] > Actions > Capacity ID)
+  - `AZURE_SQL_SERVER` (in format servername.database.windows.net ... if plain servername is used the ".database.windows.net" will be appended).
+  - `AZURE_SQL_DB` (e.g., benchmarking)
 
 - [ ] For testing Azure SQL Database as a data source, provision a `SQL Database` from the Azure Marketplace:
   - Note: You can use the Azure SQL Database free offer
