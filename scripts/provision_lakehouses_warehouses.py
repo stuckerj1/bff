@@ -77,52 +77,88 @@ def create_lakehouse(session: requests.Session, token: str, workspace_id: str, d
     except Exception:
         return {"raw_text": r.text}
 
-def create_warehouse(session: requests.Session, token: str, workspace_id: str, display_name: str, capacity_id: Optional[str] = None, poll_interval: int = 5, poll_attempts: int = 12) -> dict:
+def create_warehouse(session: requests.Session, token: str, workspace_id: str, display_name: str, capacity_id: Optional[str] = None, poll_interval: int = 5, poll_attempts: int = 60) -> dict:
+    """
+    Create a warehouse. On 201 return the parsed JSON. On 202 return a dict with status and headers,
+    and attempt to poll for completion using any Location/Azure-AsyncOperation header or by listing warehouses.
+    This function always returns a dict (never None) and logs responses for debugging.
+    """
     url = f"{API_BASE}/workspaces/{workspace_id}/warehouses"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     payload = {"displayName": display_name}
     if capacity_id:
         payload["capacityId"] = capacity_id
+
     print(f"POST {url} -> {display_name}")
     r = session.post(url, headers=headers, json=payload, timeout=60)
 
-    # Debug: show status and a short preview of body
+    # Prepare a concise body and headers preview
     body_preview = (r.text[:1000] + "...") if r.text and len(r.text) > 1000 else (r.text or "")
-    print(f"  Response {r.status_code}: {body_preview}")
+    hdrs = {k: v for k, v in r.headers.items()}
+    print(f"  Response {r.status_code}; headers: { {k:v for k,v in list(hdrs.items())[:5]} } body: {body_preview!r}")
 
-    # Accept 201 (created) or 202 (accepted async). Fail on other non-2xx.
+    # For normal 2xx responses try to parse JSON; always return a dict
     if 200 <= r.status_code < 300:
         try:
             parsed = r.json()
         except Exception:
-            # If the response isn't valid JSON, return raw text and status
-            return {"raw_text": r.text or "", "status": r.status_code}
-        # If parsed JSON is None (e.g. server returned literal "null"), return a dict instead of None
+            parsed = None
         if parsed is None:
-            return {"raw_text": r.text or "", "status": r.status_code}
+            return {"raw_text": r.text or "", "status": r.status_code, "headers": hdrs}
         return parsed
 
+    # If accepted async, attempt to follow operation headers or poll list
     if r.status_code == 202:
-        # Poll until the warehouse appears in GET /workspaces/{workspace_id}/warehouses
-        print(f"Warehouse creation accepted (202). Polling for availability (every {poll_interval}s, up to {poll_attempts} attempts)...")
+        resp_info = {"raw_text": r.text or "", "status": 202, "headers": hdrs}
+        # Check common async operation headers
+        op_url = hdrs.get("Location") or hdrs.get("Operation-Location") or hdrs.get("Azure-AsyncOperation")
+        if op_url:
+            print(f"  Async operation URL provided: {op_url}")
+            # Poll operation URL (best-effort)
+            for attempt in range(1, poll_attempts + 1):
+                time.sleep(poll_interval)
+                try:
+                    pr = session.get(op_url, headers=headers, timeout=30)
+                    print(f"  Poll op {attempt}: GET {op_url} -> {pr.status_code}")
+                    if 200 <= pr.status_code < 300:
+                        try:
+                            parsed = pr.json()
+                        except Exception:
+                            parsed = {"raw_text": pr.text}
+                        # If operation indicates resource is ready and includes an id or resource, return it
+                        if isinstance(parsed, dict) and (parsed.get("status") in ("Succeeded", "succeeded") or parsed.get("id") or parsed.get("resource")):
+                            print(f"  Operation reports completion: {parsed}")
+                            return {"operation_result": parsed, "operation_url": op_url, "status": pr.status_code}
+                except Exception as e:
+                    print(f"  Poll op {attempt} failed: {e}")
+            print(f"  Async operation at {op_url} did not indicate completion after polling.")
+            # Fall through to polling the workspace list below
+
+        # Poll the workspace warehouses list looking for the created displayName
         poll_url = f"{API_BASE}/workspaces/{workspace_id}/warehouses"
+        print(f"Warehouse creation accepted (202). Polling workspace warehouses for {display_name} (every {poll_interval}s, up to {poll_attempts} attempts)...")
         for attempt in range(1, poll_attempts + 1):
             time.sleep(poll_interval)
-            pr = session.get(poll_url, headers=headers, timeout=30)
-            print(f"  Poll {attempt}: GET {poll_url} -> {pr.status_code}")
-            if pr.status_code == 200:
-                try:
-                    val = pr.json().get("value", [])
-                except Exception:
-                    val = []
-                for wh in val:
-                    if wh.get("displayName") == display_name:
-                        print(f"Found warehouse {display_name} after {attempt} polls.")
-                        return wh
+            try:
+                pr = session.get(poll_url, headers=headers, timeout=30)
+                print(f"  Poll {attempt}: GET {poll_url} -> {pr.status_code}")
+                if pr.status_code == 200:
+                    try:
+                        val = pr.json().get("value", [])
+                    except Exception:
+                        val = []
+                    for wh in val:
+                        if wh.get("displayName") == display_name:
+                            print(f"Found warehouse {display_name} after {attempt} polls.")
+                            return wh
+            except Exception as e:
+                print(f"  Poll {attempt} failed: {e}")
             print(f"Poll {attempt}/{poll_attempts}: {display_name} not available yet.")
-        die(f"Warehouse {display_name} not found after polling (workspace {workspace_id}).")
+        # If polling did not find it, return the original 202 info so the .state file reflects the async acceptance
+        print(f"Warehouse {display_name} not found after polling (workspace {workspace_id}). Returning 202 info.")
+        return resp_info
 
-    # otherwise error
+    # Otherwise return an error via die as before (or return structured error)
     die(f"Create warehouse '{display_name}' failed: {r.status_code} {r.text}")
 
 def main(argv=None):
@@ -179,6 +215,7 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
+
 
 
 
