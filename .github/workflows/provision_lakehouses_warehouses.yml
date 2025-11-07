@@ -1,4 +1,4 @@
-name: "Provision Lakehouses & Warehouses"
+name: "2. Provision Lakehouses & Warehouses"
 
 on:
   workflow_dispatch:
