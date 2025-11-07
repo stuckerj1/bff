@@ -1,4 +1,4 @@
-name: Provision Notebooks
+name: 4. Run Benchmarks (Ingest, Update, Query)
 
 on:
   workflow_dispatch:
