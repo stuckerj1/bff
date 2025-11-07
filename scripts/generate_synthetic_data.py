@@ -44,31 +44,11 @@ def main():
 
     params = load_params(args.params_file)
 
-    # Some CI environments expect parameter keys in a container called 'spark.notebook.parameters'
-    # but papermill will map the params into the notebook's parameters cell. The notebook you
-    # have expects a JSON string stored in spark.notebook.parameters in its %%configure cell.
-    #
-    # To support that, we provide a single parameter named `conf_params_json` which the notebook
-    # can pick up OR we inject the top-level keys directly. If your notebook expects a single
-    # spark.notebook.parameters string, you can change the notebook to accept the top-level dict.
-    #
-    # Here we'll inject the top-level params as-is.
-    try:
-        run_notebook(args.notebook, args.output, params)
-    except Exception as e:
-        print("Notebook run failed:", e, file=sys.stderr)
-        raise
-
+    run_notebook(args.notebook, args.output, params)
+    
     # Produce .state/datasets.json containing dataset names (DATASETS_PARAM is expected)
     datasets = []
-    if isinstance(params, dict) and "DATASETS_PARAM" in params:
-        datasets = [d.get("name") for d in params["DATASETS_PARAM"]]
-    else:
-        # try nested keys or other shapes
-        # fallback: if params is a mapping with 'datasets' or similar
-        maybe = params.get("datasets") or params.get("DATASETS") or params.get("datasets_param")
-        if maybe:
-            datasets = [d.get("name") for d in maybe]
+    datasets = [d.get("name") for d in params["DATASETS_PARAM"]]
 
     out = STATE_DIR / "datasets.json"
     out.write_text(json.dumps({"datasets": datasets}, indent=2))
