@@ -19,20 +19,27 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --upgrade pip
 
+      - name: Download workspaces summary artifact into .state
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: provision_workspaces.yml
+          name: bff-workspaces-summary
+          path: .state
+          workflow_conclusion: success
+          branch: main
+
       - name: Run generator
+        env:
+          TENANT_ID: ${{ secrets.TENANT_ID }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
         run: |
           python ./scripts/generate_synthetic_data.py
 
-      - name: Show generated data (debug)
-        run: |
-          echo "Files in data:"
-          ls -la data || true
-          head -n 5 data/synthetic.csv || true
-
-      - name: Upload generated data artifact
+      - name: Upload generated datasets list
         uses: actions/upload-artifact@v4
         with:
-          name: synthetic-data
-          path: data/*.csv
+          name: datasets
+          path: .state/datasets.json
           if-no-files-found: error
           include-hidden-files: true
