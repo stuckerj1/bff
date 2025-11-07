@@ -1,4 +1,4 @@
-name: "Generate Synthetic Data"
+name: "3. Generate Synthetic Data"
 
 on:
   workflow_dispatch:
