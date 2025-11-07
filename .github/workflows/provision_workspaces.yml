@@ -8,7 +8,7 @@
 # Notes:
 # - Ensures requests is installed before running the script.
 # - Uses one-line python -c invocations for small extractions to avoid heredoc/indentation pitfalls that can break YAML parsing.
-name: Provision BFF Controller and Action Workspaces (test parameter sets)
+name: 1. Provision BFF Controller and Action Workspaces (test parameter sets)
 
 on:
   workflow_dispatch:
