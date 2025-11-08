@@ -71,8 +71,26 @@ if isinstance(params, dict):
             value_str = json.dumps(v, ensure_ascii=False)
         exec_params[str(k)] = {"value": value_str, "type": "string"}
 
-# put the full params JSON into configuration.conf so runtime sees spark.notebook.parameters
-conf_params = {"spark.notebook.parameters": json.dumps(params, ensure_ascii=False)}
+# Ensure DATASETS_PARAM execution parameter exists (notebook expects this)
+datasets_value = params.get("DATASETS_PARAM") or params.get("datasets") or params.get("DATASETS") or []
+exec_params["DATASETS_PARAM"] = {"value": json.dumps(datasets_value, ensure_ascii=False), "type": "string"}
+
+# Build configuration.conf payload so runtime sees spark.notebook.parameters exactly like the notebook's %%configure cell
+conf_payload = {}
+# Put DATASETS_PARAM into the conf payload (notebook expects this key)
+conf_payload["DATASETS_PARAM"] = datasets_value
+
+# Copy commonly-used keys into conf payload if present in params (keeps behavior matching interactive runs)
+for key in ("PUSH_TO_AZURE_SQL", "AZURE_SQL_SERVER", "AZURE_SQL_DB", "AZURE_SQL_SCHEMA", "distribution", "seed"):
+    if key in params:
+        conf_payload[key] = params[key]
+
+# Also preserve any other top-level keys the user provided (best-effort)
+for k, v in params.items():
+    if k not in conf_payload:
+        conf_payload[k] = v
+
+conf_params = {"spark.notebook.parameters": json.dumps(conf_payload, ensure_ascii=False)}
 
 payload = {
     "executionData": {
@@ -93,7 +111,7 @@ if loc:
 else:
     print(resp.text[:1000], flush=True)
 
-# if the run was accepted async, poll the Location URL and print status each attempt
+# if the run was accepted async, poll the Location URL and print status each attempt; break on explicit failure
 run_result = {"status_code": resp.status_code, "text": resp.text, "location": loc, "polled": []}
 failed = False
 failure_detail = None
@@ -130,6 +148,7 @@ if resp.status_code == 202 and loc:
         if 200 <= code < 300 and (status_hint is None or str(status_hint).lower() in ("succeeded", "finished", "completed")):
             print("Job reached a terminal success state.", flush=True)
             break
+
     if failed:
         run_result["failureReason"] = failure_detail
 
