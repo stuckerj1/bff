@@ -240,18 +240,20 @@ if loc:
         print("Failed to GET instance URL for debug:", e, file=sys.stderr)
 # --- END: JOB INSTANCE STATUS DEBUG (inserted) ---
 
-# --- BEGIN: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (robust, polling, easily removable) ---
-# Temporary debug: fetch the notebook definition (ipynb), poll if needed, save it and print a robust summary.
+# --- BEGIN: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (robust polling, easily removable) ---
+# Temporary debug: poll GetDefinition until an ipynb payload is available, save it and print a robust summary.
+# Keep this block for debugging and remove when done.
 try:
     import base64, re
     getdef_url = f"{API_BASE}/workspaces/{ws_id}/items/{artifact_id}/GetDefinition?format=ipynb"
     print("Requesting notebook definition (GetDefinition):", getdef_url, flush=True)
 
-    # Try POST then poll/ follow Location if 202 or wait-and-retry until 200 or timeout
+    # We'll poll the GetDefinition endpoint until we get a payload or timeout.
     gd_resp = None
-    poll_attempts = 12
-    poll_sleep = 2
-    for attempt in range(1, poll_attempts + 1):
+    max_attempts = 30
+    attempt = 0
+    while attempt < max_attempts:
+        attempt += 1
         try:
             resp = requests.post(getdef_url, headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"}, timeout=30)
         except Exception as e:
@@ -259,39 +261,42 @@ try:
             resp = None
 
         if resp is None:
-            time.sleep(poll_sleep)
+            sleep_s = min(2 + attempt, 10)
+            print(f"No response, sleeping {sleep_s}s (attempt {attempt}/{max_attempts})", flush=True)
+            time.sleep(sleep_s)
             continue
 
-        # If service returned a "follow this location" header, follow it
-        poll_loc = resp.headers.get("Location") or resp.headers.get("Operation-Location") or resp.headers.get("Azure-AsyncOperation")
+        # If service returns a Location/Operation-Location, follow it as well
+        follow_loc = resp.headers.get("Location") or resp.headers.get("Operation-Location") or resp.headers.get("Azure-AsyncOperation")
         if resp.status_code == 200:
             gd_resp = resp
-            break
-        if resp.status_code in (201, 202):
-            # if Location header present, GET it until 200
-            if poll_loc:
-                try:
-                    pr = requests.get(poll_loc, headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"}, timeout=30)
-                    if pr.status_code == 200:
-                        gd_resp = pr
-                        break
-                    else:
-                        print(f"GetDefinition poll GET status {pr.status_code} (attempt {attempt})", flush=True)
-                except Exception as e:
-                    print(f"GetDefinition poll GET failed: {e}", flush=True)
-            else:
-                # No follow link — wait a bit and retry POST (as service may be preparing result)
-                print(f"GetDefinition returned {resp.status_code}; will retry (attempt {attempt})", flush=True)
+        elif resp.status_code in (201, 202) and follow_loc:
+            # try GET on the follow link
+            try:
+                pr = requests.get(follow_loc, headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"}, timeout=30)
+                print(f"Follow GET status {pr.status_code} (attempt {attempt})", flush=True)
+                if pr.status_code == 200:
+                    gd_resp = pr
+            except Exception as e:
+                print(f"Follow GET failed: {e}", flush=True)
         else:
-            # Unexpected status; still capture response and break
-            print(f"GetDefinition returned unexpected status {resp.status_code}", flush=True)
-            gd_resp = resp
+            # Response may indicate a status field like {"status":"Running",...}. Dump it and retry.
+            try:
+                txt = resp.text or ""
+                print(f"GetDefinition POST returned {resp.status_code}. body snippet: {txt[:200]}", flush=True)
+            except Exception:
+                pass
+
+        if gd_resp:
             break
 
-        time.sleep(poll_sleep)
+        # backoff before retrying
+        sleep_s = min(2 + attempt, 10)
+        print(f"Sleeping {sleep_s}s before next GetDefinition attempt ({attempt}/{max_attempts})", flush=True)
+        time.sleep(sleep_s)
 
-    if gd_resp is None:
-        print("GetDefinition did not return a ready response after polling; proceeding with last received response if any", flush=True)
+    if not gd_resp:
+        print("GetDefinition did not return a ready response after polling; proceeding with last response if any", flush=True)
         gd_resp = resp  # may be None
 
     if not gd_resp:
@@ -307,6 +312,9 @@ try:
             gd_json = None
 
         if isinstance(gd_json, dict):
+            # If the service returns a status object (e.g., {"status":"Running",...}) we log and will have nb_bytes==None
+            if gd_json.get("status") and not gd_json.get("definition") and not gd_json.get("payload"):
+                print("GetDefinition JSON has status field but no definition/payload yet:", json.dumps(gd_json)[:1000], flush=True)
             defn = gd_json.get("definition") or gd_json.get("Definition") or {}
             parts = defn.get("parts") if isinstance(defn, dict) else None
             if parts and isinstance(parts, list):
@@ -399,10 +407,11 @@ try:
             except Exception as e:
                 print("Failed to parse notebook outputs (robust fallback):", e, flush=True)
         else:
-            print("GetDefinition did not return an InlineBase64 payload or ipynb content. Response text snippet:", (gd_resp.text or "")[:2000], flush=True)
+            # If we didn't get nb_bytes, show the latest response body to help debugging.
+            print("GetDefinition did not return an InlineBase64 payload or ipynb content. Latest response body snippet:", (gd_resp.text or "")[:2000], flush=True)
 except Exception as e:
     print("Error while fetching notebook definition:", e, file=sys.stderr, flush=True)
-# --- END: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (robust, polling, easily removable) ---
+# --- END: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (robust polling, easily removable) ---
 
 # exit non-zero only when the API call failed (non-2xx) or instance explicitly failed
 if instance_json and isinstance(instance_json, dict) and instance_json.get("status") and instance_json.get("status").lower() == "failed":
