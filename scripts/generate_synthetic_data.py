@@ -241,41 +241,58 @@ if loc:
 # --- END: JOB INSTANCE STATUS DEBUG (inserted) ---
 
 # --- BEGIN: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (robust polling, easily removable) ---
-# --- BEGIN: GETDEFINITION POLL (indefinite until not "Running"; debug, easily removable) ---
-# Temporary debug: poll GetDefinition until an ipynb payload appears or until the service
-# returns a JSON that is not {"status":"Running"}. By default this will keep polling forever.
-# To add an upper bound, set the env var MAX_GETDEF_WAIT_SECONDS (integer seconds).
+# --- BEGIN: GETDEFINITION POLL (bounded, safe; paste over the existing indefinite loop) ---
+# This block replaces the previous indefinite `while True:` polling loop with a bounded
+# wait controlled by MAX_GETDEF_WAIT_SECONDS (defaults to 600s). Setting the env var to
+# "0" or a negative integer will preserve the old indefinite behaviour.
 try:
     import base64, re
     getdef_url = f"{API_BASE}/workspaces/{ws_id}/items/{artifact_id}/GetDefinition?format=ipynb"
     print("Requesting notebook definition (GetDefinition):", getdef_url, flush=True)
 
+    # Default to 10 minutes; set MAX_GETDEF_WAIT_SECONDS='0' or negative to poll indefinitely
     max_wait_env = os.environ.get("MAX_GETDEF_WAIT_SECONDS")
-    max_wait_seconds = int(max_wait_env) if max_wait_env and max_wait_env.isdigit() else None
-    print("MAX_GETDEF_WAIT_SECONDS =", max_wait_seconds, "(None means poll indefinitely)", flush=True)
+    if max_wait_env is None:
+        max_wait_seconds = 600
+    else:
+        try:
+            max_wait_seconds = int(max_wait_env)
+        except Exception:
+            max_wait_seconds = 600
+    if max_wait_seconds <= 0:
+        print("MAX_GETDEF_WAIT_SECONDS indicates indefinite polling (<=0). Use with caution.", flush=True)
+        max_wait_seconds = None
+    else:
+        print("MAX_GETDEF_WAIT_SECONDS =", max_wait_seconds, "seconds", flush=True)
 
     attempt = 0
-    elapsed = 0
+    start_ts = time.time()
     last_resp = None
     nb_bytes = None
+
+    # conservative per-request timeout and backoff settings
+    per_request_timeout = 60
+    min_sleep = 2
+    max_sleep = 10
 
     while True:
         attempt += 1
         try:
-            resp = requests.post(getdef_url, headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"}, timeout=60)
+            resp = requests.post(getdef_url, headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"}, timeout=per_request_timeout)
             last_resp = resp
         except Exception as e:
             print(f"GetDefinition POST failed on attempt {attempt}: {e}", flush=True)
             resp = None
             last_resp = None
 
+        elapsed = int(time.time() - start_ts)
+        # If no response, backoff and maybe stop
         if resp is None:
-            sleep_s = min(2 + attempt, 10)
-            print(f"No response; sleeping {sleep_s}s (attempt {attempt})", flush=True)
+            sleep_s = min(min_sleep + attempt, max_sleep)
+            print(f"No response; sleeping {sleep_s}s (attempt {attempt}) elapsed={elapsed}s", flush=True)
             time.sleep(sleep_s)
-            elapsed += sleep_s
-            if max_wait_seconds is not None and elapsed >= max_wait_seconds:
-                print("Exceeded MAX_GETDEF_WAIT_SECONDS without a response; breaking.", flush=True)
+            if max_wait_seconds is not None and elapsed + sleep_s >= max_wait_seconds:
+                print("Reached MAX_GETDEF_WAIT_SECONDS without a response; stopping poll.", flush=True)
                 break
             continue
 
@@ -283,14 +300,13 @@ try:
         txt_snip = (resp.text or "")[:1000]
         print(f"GetDefinition POST status {code} (attempt {attempt}) resp-snippet: {txt_snip!r}", flush=True)
 
-        # If follow-location provided, try GET it (may return richer status or the payload)
+        # Follow location if provided (GET) — may return status or payload
         follow_loc = resp.headers.get("Location") or resp.headers.get("Operation-Location") or resp.headers.get("Azure-AsyncOperation")
         if follow_loc:
             try:
-                pr = requests.get(follow_loc, headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"}, timeout=60)
+                pr = requests.get(follow_loc, headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"}, timeout=per_request_timeout)
                 print(f"Follow GET status {pr.status_code} (attempt {attempt})", flush=True)
                 last_resp = pr
-                # prefer pr if it is 200
                 if pr.status_code == 200:
                     resp = pr
                     code = pr.status_code
@@ -299,24 +315,23 @@ try:
             except Exception as e:
                 print(f"Follow GET failed: {e}", flush=True)
 
-        # If 200, inspect body for payload or status
+        # Try to parse body; many shapes possible
         try:
             body_json = resp.json()
         except Exception:
             body_json = None
 
-        # If body is JSON and indicates a status, log it
+        # If JSON status-only response and no payload/definition present
         if isinstance(body_json, dict) and body_json.get("status") and not body_json.get("definition") and not body_json.get("payload"):
             status_val = body_json.get("status")
-            print(f"GetDefinition status: {status_val!r} (attempt {attempt})", flush=True)
-            # If status is something other than 'Running', break and surface the response
+            print(f"GetDefinition status: {status_val!r} (attempt {attempt}) elapsed={elapsed}s", flush=True)
+            # If terminal status other than 'Running', stop and surface the response
             if str(status_val).lower() != "running":
                 print("GetDefinition returned a terminal status other than 'Running'; stopping poll.", flush=True)
-                last_resp = resp
                 break
-            # otherwise status == "Running" -> keep polling (no payload yet)
+            # otherwise continue polling
         else:
-            # Attempt to extract payload (common shapes)
+            # Attempt to extract ipynb payload from common shapes
             if isinstance(body_json, dict):
                 defn = body_json.get("definition") or body_json.get("Definition") or {}
                 parts = defn.get("parts") if isinstance(defn, dict) else None
@@ -350,22 +365,70 @@ try:
                 last_resp = resp
                 break
 
-        # If we reached here, no payload yet and status == Running -> wait and retry
-        sleep_s = min(2 + attempt, 10)
-        print(f"Payload not ready; sleeping {sleep_s}s and retrying (attempt {attempt})", flush=True)
-        time.sleep(sleep_s)
-        elapsed += sleep_s
+        # Decide whether we should stop due to elapsed time
+        elapsed = int(time.time() - start_ts)
         if max_wait_seconds is not None and elapsed >= max_wait_seconds:
-            print("Exceeded MAX_GETDEF_WAIT_SECONDS while waiting for payload; stopping poll.", flush=True)
+            print(f"Exceeded MAX_GETDEF_WAIT_SECONDS ({max_wait_seconds}s) while waiting for payload; stopping poll.", flush=True)
             break
 
-    # After loop: if nb_bytes wasn't set, print the final response body to help debugging
-    if nb_bytes is None and last_resp is not None:
-        print("Final GetDefinition response snippet (no ipynb payload found):", (last_resp.text or "")[:4000], flush=True)
+        # Backoff then retry
+        sleep_s = min(min_sleep + attempt, max_sleep)
+        print(f"Payload not ready; sleeping {sleep_s}s and retrying (attempt {attempt}) elapsed={elapsed}s", flush=True)
+        time.sleep(sleep_s)
+
+    # Persist the last GetDefinition response body for debugging (if any)
+    try:
+        if last_resp is not None:
+            os.makedirs(".state", exist_ok=True)
+            # save the full text but cap to a reasonable size
+            last_text = (last_resp.text or "")[:200000]
+            open(".state/getdef_last_response.txt", "w", encoding="utf-8").write(last_text)
+            print("Wrote .state/getdef_last_response.txt (truncated)", flush=True)
+    except Exception as e:
+        print("Failed to write last GetDefinition response:", e, flush=True)
+
 except Exception as e:
-    print("Error while polling GetDefinition (indefinite mode):", e, file=sys.stderr, flush=True)
-# --- END: GETDEFINITION POLL (indefinite until not "Running"; debug, easily removable) ---
+    print("Error while polling GetDefinition (bounded mode):", e, file=sys.stderr, flush=True)
+# --- END REPLACEMENT ---
 # --- END: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (robust polling, easily removable) ---
+
+# --- BEGIN: JOB INSTANCE LOGS DEBUG (easily removable) ---
+# Best-effort: fetch instance-level logs via the /logs endpoint to surface driver/worker/stdout traces.
+try:
+    if loc:
+        try:
+            job_instance_id = None
+            # Prefer the ID from instance_json if present
+            if instance_json and isinstance(instance_json, dict):
+                job_instance_id = instance_json.get("id") or instance_json.get("instanceId") or None
+            # Fallback: parse id from the loc URL
+            if not job_instance_id:
+                try:
+                    job_instance_id = loc.rstrip("/").split("/")[-1]
+                except Exception:
+                    job_instance_id = None
+
+            if job_instance_id:
+                logs_url = f"{API_BASE}/workspaces/{ws_id}/items/{artifact_id}/jobs/instances/{job_instance_id}/logs"
+                print("Requesting job instance logs URL:", logs_url, flush=True)
+                logs_r = requests.get(logs_url, headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"}, timeout=60)
+                # Try to save JSON, otherwise save raw text
+                try:
+                    jr = logs_r.json()
+                    open(".state/job_instance_logs.json", "w", encoding="utf-8").write(json.dumps(jr, indent=2))
+                    print("Wrote .state/job_instance_logs.json", flush=True)
+                except Exception:
+                    open(".state/job_instance_logs.txt", "w", encoding="utf-8").write(logs_r.text or "")
+                    print("Wrote .state/job_instance_logs.txt", flush=True)
+            else:
+                print("No job_instance_id available to fetch logs (loc missing id).", flush=True)
+        except Exception as e:
+            print("Failed to GET job instance logs:", e, flush=True)
+    else:
+        print("No instance location (loc) available; skipping job logs fetch.", flush=True)
+except Exception as e:
+    print("Unexpected error when fetching job instance logs:", e, file=sys.stderr, flush=True)
+# --- END: JOB INSTANCE LOGS DEBUG (easily removable) ---
 
 # exit non-zero only when the API call failed (non-2xx) or instance explicitly failed
 if instance_json and isinstance(instance_json, dict) and instance_json.get("status") and instance_json.get("status").lower() == "failed":
