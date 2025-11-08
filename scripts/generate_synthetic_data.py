@@ -1,4 +1,17 @@
 #!/usr/bin/env python3
+import os, requests, json
+t = requests.post(f"https://login.microsoftonline.com/{os.environ['TENANT_ID']}/oauth2/v2.0/token",
+    data={"grant_type":"client_credentials","client_id":os.environ['CLIENT_ID'],"client_secret":os.environ['CLIENT_SECRET'],"scope":"https://api.fabric.microsoft.com/.default"}).json()['access_token']
+h = {"Authorization":f"Bearer {t}","Accept":"application/json"}
+url = "https://api.fabric.microsoft.com/v1/workspaces/edbfa4bb-0818-4af3-9fe3-1450116a8634/items/b6895807-498b-464d-9a7d-e3a2a96beeee/jobs/instances/c473d277-b668-4ad4-a282-194ebe25f246"
+r = requests.get(url, headers=h, timeout=30)
+print(r.status_code)
+print(r.headers)
+try:
+    print(json.dumps(r.json(), indent=2)[:5000])
+except Exception:
+    print(r.text[:5000])
+
 import os
 import json
 import sys
