@@ -50,6 +50,8 @@ jobs:
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           AZURE_SQL_SERVER: ${{ secrets.AZURE_SQL_SERVER }}
           AZURE_SQL_DB: ${{ secrets.AZURE_SQL_DB }}
+          FORCE_STARTER_POOL: '1'
+          MAX_GETDEF_WAIT_SECONDS: '200'
         run: |
           python ./scripts/generate_synthetic_data.py --params-file config/test_parameter_sets.yml --notebook notebooks/generate_data.ipynb --output .state/generate_output.ipynb
 
