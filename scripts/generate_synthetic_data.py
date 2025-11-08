@@ -211,7 +211,7 @@ open(".state/datasets.json", "w", encoding="utf-8").write(json.dumps({"datasets"
 
 # --- BEGIN: JOB INSTANCE STATUS DEBUG (inserted) ---
 # This block fetches the full job instance JSON using the same token and prints a concise summary.
-# It mirrors the get_job_instance_status.py logic you referenced and helps surface failureReason,
+# It mirrors the get_job_instance_status.py logic and helps surface failureReason,
 # activities, or other runtime diagnostics when the instance endpoint is accessible.
 if loc:
     try:
@@ -239,11 +239,14 @@ if loc:
     except Exception as e:
         print("Failed to GET instance URL for debug:", e, file=sys.stderr)
 # --- END: JOB INSTANCE STATUS DEBUG (inserted) ---
-# --- BEGIN: FETCH EXECUTED NOTEBOOK (append) ---
+
+# --- BEGIN: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (easily removable) ---
 # If the job instance completed but the notebook shows no outputs in the UI,
 # fetch the notebook definition from the Fabric API (ipynb format) and save it
 # so we can inspect whether cells were executed (outputs present) or not.
+# This block is intended as temporary debug code — remove it when done.
 try:
+    import base64, re
     getdef_url = f"{API_BASE}/workspaces/{ws_id}/items/{artifact_id}/GetDefinition?format=ipynb"
     print("Requesting notebook definition (GetDefinition):", getdef_url, flush=True)
     gd_hdr = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json", "Accept": "application/json"}
@@ -284,11 +287,10 @@ try:
 
     # If we still don't have bytes, attempt to parse the text for an obvious Base64 blob
     if nb_bytes is None and isinstance(gd_resp.text, str):
-        import re, base64 as _b64
         m = re.search(r'InlineBase64[^:\n\r]*[:=]\s*(")?([A-Za-z0-9+/=\n\r]+)\1?', gd_resp.text)
         if m:
             try:
-                nb_bytes = _b64.b64decode(m.group(2))
+                nb_bytes = base64.b64decode(m.group(2))
             except Exception:
                 pass
 
@@ -297,13 +299,24 @@ try:
         open(out_path, "wb").write(nb_bytes)
         print("Wrote executed notebook ->", out_path, flush=True)
 
-        # Print a brief summary of the first code cells and their outputs to the action log
+        # Print a brief summary of the first code cells and their outputs to the action log.
+        # This uses a lightweight JSON fallback so no extra dependencies are required.
         try:
-            import nbformat
-            nb = nbformat.reads(nb_bytes.decode("utf-8"), as_version=4)
-            for i, cell in enumerate(nb.cells[:8], start=1):
+            try:
+                import nbformat as _nbf  # optional, nicer parsing if available
+                nb = _nbf.reads(nb_bytes.decode("utf-8"), as_version=4)
+                cells = nb.cells
+            except Exception:
+                nb_json = json.loads(nb_bytes.decode("utf-8"))
+                cells = nb_json.get("cells", [])
+
+            for i, cell in enumerate(cells[:8], start=1):
                 ctype = cell.get("cell_type")
-                src = (cell.get("source") or "")
+                src_val = cell.get("source") or ""
+                if isinstance(src_val, list):
+                    src = "".join(src_val)
+                else:
+                    src = str(src_val)
                 out_snip = ""
                 if ctype == "code":
                     outputs = cell.get("outputs") or []
@@ -312,12 +325,12 @@ try:
                         out_snip = o.get("text") or o.get("data", {}).get("text/plain", "") or str(o)[:400]
                 print(f"cell {i} [{ctype}] src_snippet={str(src)[:200]!r} out_snippet={str(out_snip)[:200]!r}", flush=True)
         except Exception as e:
-            print("Failed to parse notebook outputs with nbformat:", e, flush=True)
+            print("Failed to parse notebook outputs (fallback JSON parser):", e, flush=True)
     else:
         print("GetDefinition did not return an InlineBase64 payload or ipynb content. Response text snippet:", gd_resp.text[:2000], flush=True)
 except Exception as e:
     print("Error while fetching notebook definition:", e, file=sys.stderr, flush=True)
-# --- END: FETCH EXECUTED NOTEBOOK (append) ---
+# --- END: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (easily removable) ---
 
 # exit non-zero only when the API call failed (non-2xx) or instance explicitly failed
 if instance_json and isinstance(instance_json, dict) and instance_json.get("status") and instance_json.get("status").lower() == "failed":
