@@ -94,10 +94,12 @@ else:
     print(resp.text[:1000], flush=True)
 
 # if the run was accepted async, poll the Location URL and print status each attempt
-run_result = {"status_code": resp.status_code, "text": resp.text, "location": loc}
+run_result = {"status_code": resp.status_code, "text": resp.text, "location": loc, "polled": []}
+failed = False
+failure_detail = None
+
 if resp.status_code == 202 and loc:
     print("Polling job instance at:", loc, flush=True)
-    success = False
     for attempt in range(1, 61):
         time.sleep(5)
         jr = requests.get(loc, headers=hdr, timeout=30)
@@ -109,18 +111,27 @@ if resp.status_code == 202 and loc:
             j = None
 
         status_hint = None
+        failure_reason = None
         if isinstance(j, dict):
             status_hint = j.get("status") or j.get("state") or (j.get("job") or {}).get("status")
+            failure_reason = j.get("failureReason") or (j.get("job") or {}).get("failureReason")
 
         print(f"poll {attempt:02d}: status_code={code} status_hint={status_hint} text_snippet={txt[:400]}", flush=True)
-        run_result["polled_last"] = {"attempt": attempt, "status_code": code, "status_hint": status_hint, "text_snippet": txt[:1000]}
+        run_result["polled"].append({"attempt": attempt, "status_code": code, "status_hint": status_hint, "text_snippet": txt[:1000]})
 
-        if 200 <= code < 300 and (status_hint is None or str(status_hint).lower() in ("succeeded", "finished", "completed")):
-            success = True
+        # If job explicitly failed, break out and record failure details
+        if isinstance(status_hint, str) and status_hint.lower() == "failed":
+            failed = True
+            failure_detail = failure_reason or j
+            print("Job reported status 'Failed' - stopping poll and recording failure detail.", flush=True)
             break
 
-    if not success:
-        print("Timed out waiting for job instance to reach a terminal success state.", file=sys.stderr, flush=True)
+        # Terminal success heuristics
+        if 200 <= code < 300 and (status_hint is None or str(status_hint).lower() in ("succeeded", "finished", "completed")):
+            print("Job reached a terminal success state.", flush=True)
+            break
+    if failed:
+        run_result["failureReason"] = failure_detail
 
 # persist a tiny run result for downstream steps
 os.makedirs(".state", exist_ok=True)
@@ -137,7 +148,11 @@ else:
 
 open(".state/datasets.json", "w", encoding="utf-8").write(json.dumps({"datasets": datasets}, indent=2))
 
-# exit success if initial call was 2xx or accepted (202); else non-zero
+# exit non-zero if the job failed (explicit Failed status), otherwise success for 2xx/202
+if failed:
+    print("Exiting with non-zero due to job failure. See .state/notebook_run_result.json for details.", file=sys.stderr)
+    sys.exit(12)
+
 if 200 <= resp.status_code < 300 or resp.status_code == 202:
     sys.exit(0)
 else:
