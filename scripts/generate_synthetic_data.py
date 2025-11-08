@@ -239,6 +239,85 @@ if loc:
     except Exception as e:
         print("Failed to GET instance URL for debug:", e, file=sys.stderr)
 # --- END: JOB INSTANCE STATUS DEBUG (inserted) ---
+# --- BEGIN: FETCH EXECUTED NOTEBOOK (append) ---
+# If the job instance completed but the notebook shows no outputs in the UI,
+# fetch the notebook definition from the Fabric API (ipynb format) and save it
+# so we can inspect whether cells were executed (outputs present) or not.
+try:
+    getdef_url = f"{API_BASE}/workspaces/{ws_id}/items/{artifact_id}/GetDefinition?format=ipynb"
+    print("Requesting notebook definition (GetDefinition):", getdef_url, flush=True)
+    gd_hdr = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json", "Accept": "application/json"}
+    gd_resp = requests.post(getdef_url, headers=gd_hdr, timeout=30)
+    print("GetDefinition HTTP", gd_resp.status_code, flush=True)
+
+    nb_bytes = None
+    try:
+        gd_json = gd_resp.json()
+    except Exception:
+        gd_json = None
+
+    # Look for common payload shapes: definition.parts[].payload (InlineBase64) or top-level payload
+    if isinstance(gd_json, dict):
+        defn = gd_json.get("definition") or gd_json.get("Definition") or {}
+        parts = defn.get("parts") if isinstance(defn, dict) else None
+        if parts and isinstance(parts, list):
+            for p in parts:
+                payload = p.get("payload") or p.get("Payload")
+                if isinstance(payload, str):
+                    try:
+                        nb_bytes = base64.b64decode(payload)
+                        break
+                    except Exception:
+                        nb_bytes = payload.encode("utf-8")
+        # fallback: top-level 'payload'
+        if nb_bytes is None and isinstance(gd_json.get("payload"), str):
+            try:
+                nb_bytes = base64.b64decode(gd_json["payload"])
+            except Exception:
+                nb_bytes = gd_json["payload"].encode("utf-8")
+    else:
+        # If the response wasn't JSON, try to treat it as raw ipynb bytes
+        try:
+            nb_bytes = gd_resp.content
+        except Exception:
+            nb_bytes = None
+
+    # If we still don't have bytes, attempt to parse the text for an obvious Base64 blob
+    if nb_bytes is None and isinstance(gd_resp.text, str):
+        import re, base64 as _b64
+        m = re.search(r'InlineBase64[^:\n\r]*[:=]\s*(")?([A-Za-z0-9+/=\n\r]+)\1?', gd_resp.text)
+        if m:
+            try:
+                nb_bytes = _b64.b64decode(m.group(2))
+            except Exception:
+                pass
+
+    if nb_bytes:
+        out_path = ".state/generate_output.executed.ipynb"
+        open(out_path, "wb").write(nb_bytes)
+        print("Wrote executed notebook ->", out_path, flush=True)
+
+        # Print a brief summary of the first code cells and their outputs to the action log
+        try:
+            import nbformat
+            nb = nbformat.reads(nb_bytes.decode("utf-8"), as_version=4)
+            for i, cell in enumerate(nb.cells[:8], start=1):
+                ctype = cell.get("cell_type")
+                src = (cell.get("source") or "")
+                out_snip = ""
+                if ctype == "code":
+                    outputs = cell.get("outputs") or []
+                    if outputs:
+                        o = outputs[0]
+                        out_snip = o.get("text") or o.get("data", {}).get("text/plain", "") or str(o)[:400]
+                print(f"cell {i} [{ctype}] src_snippet={str(src)[:200]!r} out_snippet={str(out_snip)[:200]!r}", flush=True)
+        except Exception as e:
+            print("Failed to parse notebook outputs with nbformat:", e, flush=True)
+    else:
+        print("GetDefinition did not return an InlineBase64 payload or ipynb content. Response text snippet:", gd_resp.text[:2000], flush=True)
+except Exception as e:
+    print("Error while fetching notebook definition:", e, file=sys.stderr, flush=True)
+# --- END: FETCH EXECUTED NOTEBOOK (append) ---
 
 # exit non-zero only when the API call failed (non-2xx) or instance explicitly failed
 if instance_json and isinstance(instance_json, dict) and instance_json.get("status") and instance_json.get("status").lower() == "failed":
