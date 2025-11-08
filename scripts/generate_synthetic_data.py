@@ -140,8 +140,10 @@ if env_id or env_name:
         conf_configuration["environment"]["name"] = env_name
 
 # Optional: force Fabric to provision a starter compute for debugging runs
-conf_configuration["useStarterPool"] = True
-print("DEBUG: forcing starter pool allocation (useStarterPool=True)", flush=True)
+# Enable by setting env FORCE_STARTER_POOL=1 in your Actions job or environment
+if os.environ.get("FORCE_STARTER_POOL") == "1":
+    conf_configuration["useStarterPool"] = True
+    print("DEBUG: forcing starter pool allocation (useStarterPool=True)", flush=True)
 
 # POST RunNotebook
 payload = {
