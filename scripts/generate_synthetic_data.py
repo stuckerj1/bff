@@ -209,6 +209,37 @@ else:
         datasets = [d.get("name") for d in maybe if isinstance(d, dict) and d.get("name")]
 open(".state/datasets.json", "w", encoding="utf-8").write(json.dumps({"datasets": datasets}, indent=2))
 
+# --- BEGIN: JOB INSTANCE STATUS DEBUG (inserted) ---
+# This block fetches the full job instance JSON using the same token and prints a concise summary.
+# It mirrors the get_job_instance_status.py logic you referenced and helps surface failureReason,
+# activities, or other runtime diagnostics when the instance endpoint is accessible.
+if loc:
+    try:
+        # Use Accept: application/json to encourage JSON response
+        debug_headers = {"Authorization": f"Bearer {tok}", "Accept": "application/json"}
+        # GET the instance resource (workspace/item/instance)
+        r = requests.get(loc, headers=debug_headers, timeout=30)
+        print("HTTP", r.status_code)
+        try:
+            j = r.json()
+            print(json.dumps(j, indent=2)[:20000])
+        except Exception:
+            print("Non-JSON response:", r.text[:4000])
+
+        # concise summary
+        try:
+            status = j.get("status") or j.get("state") or (j.get("job") or {}).get("status")
+            failure = j.get("failureReason") or (j.get("job") or {}).get("failureReason")
+            print("\nSummary:")
+            print(" status:", status)
+            if failure:
+                print(" failureReason:", json.dumps(failure)[:4000])
+        except Exception:
+            pass
+    except Exception as e:
+        print("Failed to GET instance URL for debug:", e, file=sys.stderr)
+# --- END: JOB INSTANCE STATUS DEBUG (inserted) ---
+
 # exit non-zero only when the API call failed (non-2xx) or instance explicitly failed
 if instance_json and isinstance(instance_json, dict) and instance_json.get("status") and instance_json.get("status").lower() == "failed":
     sys.exit(12)
