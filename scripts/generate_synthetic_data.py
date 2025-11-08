@@ -108,7 +108,6 @@ if lh_r.status_code == 200:
 # Resolve environment id if the params specify an environment name (optional)
 env_id = None
 env_name = None
-# Accept environment config from params (common shapes)
 if isinstance(params.get("configuration"), dict) and isinstance(params["configuration"].get("environment"), dict):
     env_name = params["configuration"]["environment"].get("name") or params["configuration"]["environment"].get("displayName")
 elif isinstance(params.get("environment"), dict):
@@ -138,6 +137,9 @@ if env_id or env_name:
         conf_configuration["environment"]["id"] = env_id
     if env_name:
         conf_configuration["environment"]["name"] = env_name
+
+# <<-- Key change: request the starter pool so compute is actually provisioned
+conf_configuration["useStarterPool"] = True
 
 # POST RunNotebook
 payload = {
