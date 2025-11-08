@@ -241,27 +241,28 @@ if loc:
 # --- END: JOB INSTANCE STATUS DEBUG (inserted) ---
 
 # --- BEGIN: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (robust polling, easily removable) ---
-# --- BEGIN: GETDEFINITION POLL (longer wait, debug) ---
-# Replace previous fetch block with this when debugging async definition generation.
-# Polls GetDefinition until an ipynb payload appears or we hit max_wait_seconds.
+# --- BEGIN: GETDEFINITION POLL (indefinite until not "Running"; debug, easily removable) ---
+# Temporary debug: poll GetDefinition until an ipynb payload appears or until the service
+# returns a JSON that is not {"status":"Running"}. By default this will keep polling forever.
+# To add an upper bound, set the env var MAX_GETDEF_WAIT_SECONDS (integer seconds).
 try:
-    import base64, re, math
+    import base64, re
     getdef_url = f"{API_BASE}/workspaces/{ws_id}/items/{artifact_id}/GetDefinition?format=ipynb"
     print("Requesting notebook definition (GetDefinition):", getdef_url, flush=True)
 
-    # Polling configuration
-    max_wait_seconds = 300           # total max wait (adjust as needed, e.g. 300s = 5 minutes)
-    initial_sleep = 2                # first wait
-    max_sleep = 10                   # max between attempts
-    elapsed = 0
-    attempt = 0
-    gd_resp = None
-    last_resp = None
+    max_wait_env = os.environ.get("MAX_GETDEF_WAIT_SECONDS")
+    max_wait_seconds = int(max_wait_env) if max_wait_env and max_wait_env.isdigit() else None
+    print("MAX_GETDEF_WAIT_SECONDS =", max_wait_seconds, "(None means poll indefinitely)", flush=True)
 
-    while elapsed < max_wait_seconds:
+    attempt = 0
+    elapsed = 0
+    last_resp = None
+    nb_bytes = None
+
+    while True:
         attempt += 1
         try:
-            resp = requests.post(getdef_url, headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"}, timeout=30)
+            resp = requests.post(getdef_url, headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"}, timeout=60)
             last_resp = resp
         except Exception as e:
             print(f"GetDefinition POST failed on attempt {attempt}: {e}", flush=True)
@@ -269,112 +270,102 @@ try:
             last_resp = None
 
         if resp is None:
-            sleep_s = min(initial_sleep + attempt, max_sleep)
+            sleep_s = min(2 + attempt, 10)
             print(f"No response; sleeping {sleep_s}s (attempt {attempt})", flush=True)
             time.sleep(sleep_s)
             elapsed += sleep_s
+            if max_wait_seconds is not None and elapsed >= max_wait_seconds:
+                print("Exceeded MAX_GETDEF_WAIT_SECONDS without a response; breaking.", flush=True)
+                break
             continue
 
-        # If the response provides a follow location, try to GET that
-        follow_loc = resp.headers.get("Location") or resp.headers.get("Operation-Location") or resp.headers.get("Azure-AsyncOperation")
         code = resp.status_code
-        txt_snip = (resp.text or "")[:800]
+        txt_snip = (resp.text or "")[:1000]
         print(f"GetDefinition POST status {code} (attempt {attempt}) resp-snippet: {txt_snip!r}", flush=True)
 
-        # If 200, parse and proceed
-        if code == 200:
-            gd_resp = resp
-            break
-
-        # If 202/201 and follow link present, try GET on follow link (may be faster)
-        if code in (201, 202) and follow_loc:
+        # If follow-location provided, try GET it (may return richer status or the payload)
+        follow_loc = resp.headers.get("Location") or resp.headers.get("Operation-Location") or resp.headers.get("Azure-AsyncOperation")
+        if follow_loc:
             try:
-                pr = requests.get(follow_loc, headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"}, timeout=30)
+                pr = requests.get(follow_loc, headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"}, timeout=60)
                 print(f"Follow GET status {pr.status_code} (attempt {attempt})", flush=True)
-                if pr.status_code == 200:
-                    gd_resp = pr
-                    break
                 last_resp = pr
+                # prefer pr if it is 200
+                if pr.status_code == 200:
+                    resp = pr
+                    code = pr.status_code
+                    txt_snip = (pr.text or "")[:1000]
+                    print(f"Follow GET returned 200 with snippet: {txt_snip!r}", flush=True)
             except Exception as e:
                 print(f"Follow GET failed: {e}", flush=True)
 
-        # If service returned a JSON status object like {"status":"Running", ...}, log it and retry
+        # If 200, inspect body for payload or status
         try:
             body_json = resp.json()
-            if isinstance(body_json, dict) and body_json.get("status"):
-                print(f"GetDefinition status object: {json.dumps(body_json)[:1000]}", flush=True)
-        except Exception:
-            pass
-
-        # Backoff
-        sleep_s = min(initial_sleep + attempt, max_sleep)
-        print(f"Sleeping {sleep_s}s before next GetDefinition attempt ({attempt}). Elapsed {elapsed}s / {max_wait_seconds}s", flush=True)
-        time.sleep(sleep_s)
-        elapsed += sleep_s
-
-    # If we didn't get a ready response, fall back to last received response
-    if gd_resp is None:
-        print("GetDefinition did not return an ipynb payload within timeout. Inspecting last response...", flush=True)
-        gd_resp = last_resp
-
-    if not gd_resp:
-        print("No GetDefinition response available to parse.", flush=True)
-    else:
-        print("Final GetDefinition HTTP", gd_resp.status_code, flush=True)
-        # Attempt to find ipynb payload in common places
-        nb_bytes = None
-        try:
-            body_json = gd_resp.json()
         except Exception:
             body_json = None
 
-        if isinstance(body_json, dict):
-            # If we have a status-only response, show it
-            if body_json.get("status") and not body_json.get("definition") and not body_json.get("payload"):
-                print("GetDefinition JSON indicates still-processing:", json.dumps(body_json)[:1200], flush=True)
-            # Common payload shapes: definition.parts[].payload or top-level 'payload'
-            defn = body_json.get("definition") or body_json.get("Definition") or {}
-            parts = defn.get("parts") if isinstance(defn, dict) else None
-            if parts and isinstance(parts, list):
-                for p in parts:
-                    payload = p.get("payload") or p.get("Payload")
-                    if isinstance(payload, str):
-                        try:
-                            nb_bytes = base64.b64decode(payload)
-                            break
-                        except Exception:
-                            nb_bytes = payload.encode("utf-8")
-            if nb_bytes is None and isinstance(body_json.get("payload"), str):
-                try:
-                    nb_bytes = base64.b64decode(body_json["payload"])
-                except Exception:
-                    nb_bytes = body_json["payload"].encode("utf-8")
+        # If body is JSON and indicates a status, log it
+        if isinstance(body_json, dict) and body_json.get("status") and not body_json.get("definition") and not body_json.get("payload"):
+            status_val = body_json.get("status")
+            print(f"GetDefinition status: {status_val!r} (attempt {attempt})", flush=True)
+            # If status is something other than 'Running', break and surface the response
+            if str(status_val).lower() != "running":
+                print("GetDefinition returned a terminal status other than 'Running'; stopping poll.", flush=True)
+                last_resp = resp
+                break
+            # otherwise status == "Running" -> keep polling (no payload yet)
         else:
-            # Maybe raw ipynb bytes were returned
-            try:
-                nb_bytes = gd_resp.content
-            except Exception:
-                nb_bytes = None
-
-        # Last attempt: search text for InlineBase64 blob
-        if nb_bytes is None and isinstance(gd_resp.text, str):
-            m = re.search(r'InlineBase64[^:\n\r]*[:=]\s*(")?([A-Za-z0-9+/=\n\r]+)\1?', gd_resp.text)
-            if m:
+            # Attempt to extract payload (common shapes)
+            if isinstance(body_json, dict):
+                defn = body_json.get("definition") or body_json.get("Definition") or {}
+                parts = defn.get("parts") if isinstance(defn, dict) else None
+                if parts and isinstance(parts, list):
+                    for p in parts:
+                        payload = p.get("payload") or p.get("Payload")
+                        if isinstance(payload, str):
+                            try:
+                                nb_bytes = base64.b64decode(payload)
+                                break
+                            except Exception:
+                                nb_bytes = payload.encode("utf-8")
+                if nb_bytes is None and isinstance(body_json.get("payload"), str):
+                    try:
+                        nb_bytes = base64.b64decode(body_json["payload"])
+                    except Exception:
+                        nb_bytes = body_json["payload"].encode("utf-8")
+            else:
+                # maybe raw ipynb bytes were returned directly
                 try:
-                    nb_bytes = base64.b64decode(m.group(2))
+                    nb_bytes = resp.content or None
                 except Exception:
                     nb_bytes = None
 
-        if nb_bytes:
-            out_path = ".state/generate_output.executed.ipynb"
-            open(out_path, "wb").write(nb_bytes)
-            print("Wrote executed notebook ->", out_path, flush=True)
-        else:
-            print("GetDefinition did not return an ipynb payload. Latest body snippet:", (gd_resp.text or "")[:2000], flush=True)
+            # If we found bytes, write and stop
+            if nb_bytes:
+                out_path = ".state/generate_output.executed.ipynb"
+                os.makedirs(".state", exist_ok=True)
+                open(out_path, "wb").write(nb_bytes)
+                print("Wrote executed notebook ->", out_path, flush=True)
+                last_resp = resp
+                break
 
+        # If we reached here, no payload yet and status == Running -> wait and retry
+        sleep_s = min(2 + attempt, 10)
+        print(f"Payload not ready; sleeping {sleep_s}s and retrying (attempt {attempt})", flush=True)
+        time.sleep(sleep_s)
+        elapsed += sleep_s
+        if max_wait_seconds is not None and elapsed >= max_wait_seconds:
+            print("Exceeded MAX_GETDEF_WAIT_SECONDS while waiting for payload; stopping poll.", flush=True)
+            break
+
+    # After loop: if nb_bytes wasn't set, print the final response body to help debugging
+    if nb_bytes is None and last_resp is not None:
+        print("Final GetDefinition response snippet (no ipynb payload found):", (last_resp.text or "")[:4000], flush=True)
 except Exception as e:
-    print("Error while polling GetDefinition:", e, file=sys.stderr, flush=True)
-# --- END: GETDEFINITION POLL (longer wait, debug) ---# --- END: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (robust polling, easily removable) ---
+    print("Error while polling GetDefinition (indefinite mode):", e, file=sys.stderr, flush=True)
+# --- END: GETDEFINITION POLL (indefinite until not "Running"; debug, easily removable) ---
+# --- END: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (robust polling, easily removable) ---
 
 # exit non-zero only when the API call failed (non-2xx) or instance explicitly failed
 if instance_json and isinstance(instance_json, dict) and instance_json.get("status") and instance_json.get("status").lower() == "failed":
