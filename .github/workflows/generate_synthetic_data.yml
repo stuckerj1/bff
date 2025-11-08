@@ -60,3 +60,11 @@ jobs:
           path: .state/datasets.json
           if-no-files-found: error
           include-hidden-files: true
+
+      - name: Upload run artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-artifacts
+          path: .state/**
+          if-no-files-found: warn
+          include-hidden-files: true
