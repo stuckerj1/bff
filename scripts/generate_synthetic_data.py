@@ -139,6 +139,10 @@ if env_id or env_name:
     if env_name:
         conf_configuration["environment"]["name"] = env_name
 
+# Optional: force Fabric to provision a starter compute for debugging runs
+conf_configuration["useStarterPool"] = True
+print("DEBUG: forcing starter pool allocation (useStarterPool=True)", flush=True)
+
 # POST RunNotebook
 payload = {
     "executionData": {
@@ -241,24 +245,23 @@ if loc:
 # --- END: JOB INSTANCE STATUS DEBUG (inserted) ---
 
 # --- BEGIN: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (robust polling, easily removable) ---
-# --- BEGIN: GETDEFINITION POLL (bounded, safe; paste over the existing indefinite loop) ---
-# This block replaces the previous indefinite `while True:` polling loop with a bounded
-# wait controlled by MAX_GETDEF_WAIT_SECONDS (defaults to 600s). Setting the env var to
-# "0" or a negative integer will preserve the old indefinite behaviour.
+# --- BEGIN: GETDEFINITION POLL (bounded, safe) ---
+# This block polls GetDefinition until an ipynb payload appears or until MAX_GETDEF_WAIT_SECONDS elapses.
+# Default wait is 120 seconds; set MAX_GETDEF_WAIT_SECONDS to override.
 try:
     import base64, re
     getdef_url = f"{API_BASE}/workspaces/{ws_id}/items/{artifact_id}/GetDefinition?format=ipynb"
     print("Requesting notebook definition (GetDefinition):", getdef_url, flush=True)
 
-    # Default to 10 minutes; set MAX_GETDEF_WAIT_SECONDS='0' or negative to poll indefinitely
+    # Default to 120 seconds; set MAX_GETDEF_WAIT_SECONDS='0' or negative to poll indefinitely
     max_wait_env = os.environ.get("MAX_GETDEF_WAIT_SECONDS")
     if max_wait_env is None:
-        max_wait_seconds = 600
+        max_wait_seconds = 180
     else:
         try:
             max_wait_seconds = int(max_wait_env)
         except Exception:
-            max_wait_seconds = 600
+            max_wait_seconds = 120
     if max_wait_seconds <= 0:
         print("MAX_GETDEF_WAIT_SECONDS indicates indefinite polling (<=0). Use with caution.", flush=True)
         max_wait_seconds = None
@@ -389,7 +392,7 @@ try:
 
 except Exception as e:
     print("Error while polling GetDefinition (bounded mode):", e, file=sys.stderr, flush=True)
-# --- END REPLACEMENT ---
+# --- END: GETDEFINITION POLL (bounded, safe) ---
 # --- END: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (robust polling, easily removable) ---
 
 # --- BEGIN: JOB INSTANCE LOGS DEBUG (easily removable) ---
