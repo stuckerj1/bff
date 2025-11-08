@@ -76,31 +76,37 @@ datasets_value = params.get("DATASETS_PARAM") or params.get("datasets") or param
 exec_params["DATASETS_PARAM"] = {"value": json.dumps(datasets_value, ensure_ascii=False), "type": "string"}
 
 # Build configuration.conf payload so runtime sees spark.notebook.parameters exactly like the notebook's %%configure cell
+# We must include the DATASETS_PARAM (and other keys) under spark.notebook.parameters and also set defaultLakehouse if the notebook expects it.
 conf_payload = {}
-# Put DATASETS_PARAM into the conf payload (notebook expects this key)
 conf_payload["DATASETS_PARAM"] = datasets_value
 
-# Copy commonly-used keys into conf payload if present in params (keeps behavior matching interactive runs)
+# copy common keys if present
 for key in ("PUSH_TO_AZURE_SQL", "AZURE_SQL_SERVER", "AZURE_SQL_DB", "AZURE_SQL_SCHEMA", "distribution", "seed"):
     if key in params:
         conf_payload[key] = params[key]
 
-# Also preserve any other top-level keys the user provided (best-effort)
+# preserve other top-level keys
 for k, v in params.items():
     if k not in conf_payload:
         conf_payload[k] = v
 
-conf_params = {"spark.notebook.parameters": json.dumps(conf_payload, ensure_ascii=False)}
+# Ensure defaultLakehouse is provided (match your notebook's parameters cell)
+# Use name from params if provided, otherwise fall back to the notebook's expected name.
+lakehouse_name = params.get("defaultLakehouse", {}).get("name") if isinstance(params.get("defaultLakehouse"), dict) else params.get("defaultLakehouse")
+if not lakehouse_name:
+    lakehouse_name = "DataSourceLakehouse"
+conf_configuration = {"conf": {"spark.notebook.parameters": json.dumps(conf_payload, ensure_ascii=False)},
+                      "defaultLakehouse": {"name": lakehouse_name}}
 
 payload = {
     "executionData": {
         "parameters": exec_params,
-        "configuration": {"conf": conf_params},
+        "configuration": conf_configuration,
     }
 }
 
 # debug + POST
-print("RunNotebook payload preview:", json.dumps(payload)[:1000], flush=True)
+print("RunNotebook payload preview:", json.dumps(payload)[:1200], flush=True)
 url = f"https://api.fabric.microsoft.com/v1/workspaces/{ws_id}/items/{artifact_id}/jobs/instances?jobType=RunNotebook"
 resp = requests.post(url, headers=hdr, json=payload, timeout=120)
 print("Run response status:", resp.status_code, flush=True)
@@ -115,6 +121,7 @@ else:
 run_result = {"status_code": resp.status_code, "text": resp.text, "location": loc, "polled": []}
 failed = False
 failure_detail = None
+instance_json = None
 
 if resp.status_code == 202 and loc:
     print("Polling job instance at:", loc, flush=True)
@@ -131,6 +138,7 @@ if resp.status_code == 202 and loc:
         status_hint = None
         failure_reason = None
         if isinstance(j, dict):
+            instance_json = j
             status_hint = j.get("status") or j.get("state") or (j.get("job") or {}).get("status")
             failure_reason = j.get("failureReason") or (j.get("job") or {}).get("failureReason")
 
@@ -145,12 +153,26 @@ if resp.status_code == 202 and loc:
             break
 
         # Terminal success heuristics
-        if 200 <= code < 300 and (status_hint is None or str(status_hint).lower() in ("succeeded", "finished", "completed")):
+        if 200 <= code < 300 and (status_hint is None or str(status_hint).lower() in ("succeeded", "finished", "completed", "completedwithwarnings")):
             print("Job reached a terminal success state.", flush=True)
             break
 
     if failed:
         run_result["failureReason"] = failure_detail
+
+# After the job completes/fails, try to surface any activity logs or outputs found in the instance JSON
+if instance_json:
+    # print top-level keys and any failureReason or outputs for easier debugging
+    print("Instance JSON keys:", list(instance_json.keys()), flush=True)
+    if "failureReason" in instance_json:
+        print("failureReason:", json.dumps(instance_json.get("failureReason"))[:2000], flush=True)
+    # some job instance responses include activities or outputs; print a short summary if present
+    for key in ("activities", "outputs", "job", "tasks"):
+        if key in instance_json:
+            try:
+                print(f"{key} (summary):", json.dumps(instance_json[key])[:2000], flush=True)
+            except Exception:
+                print(f"{key}: (unprintable)", flush=True)
 
 # persist a tiny run result for downstream steps
 os.makedirs(".state", exist_ok=True)
