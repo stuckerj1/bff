@@ -240,123 +240,169 @@ if loc:
         print("Failed to GET instance URL for debug:", e, file=sys.stderr)
 # --- END: JOB INSTANCE STATUS DEBUG (inserted) ---
 
-# --- BEGIN: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (easily removable) ---
-# If the job instance completed but the notebook shows no outputs in the UI,
-# fetch the notebook definition from the Fabric API (ipynb format) and save it
-# so we can inspect whether cells were executed (outputs present) or not.
-# This block is intended as temporary debug code — remove it when done.
+# --- BEGIN: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (robust, polling, easily removable) ---
+# Temporary debug: fetch the notebook definition (ipynb), poll if needed, save it and print a robust summary.
 try:
     import base64, re
     getdef_url = f"{API_BASE}/workspaces/{ws_id}/items/{artifact_id}/GetDefinition?format=ipynb"
     print("Requesting notebook definition (GetDefinition):", getdef_url, flush=True)
-    gd_hdr = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json", "Accept": "application/json"}
-    gd_resp = requests.post(getdef_url, headers=gd_hdr, timeout=30)
-    print("GetDefinition HTTP", gd_resp.status_code, flush=True)
 
-    nb_bytes = None
-    try:
-        gd_json = gd_resp.json()
-    except Exception:
-        gd_json = None
-
-    # Look for common payload shapes: definition.parts[].payload (InlineBase64) or top-level payload
-    if isinstance(gd_json, dict):
-        defn = gd_json.get("definition") or gd_json.get("Definition") or {}
-        parts = defn.get("parts") if isinstance(defn, dict) else None
-        if parts and isinstance(parts, list):
-            for p in parts:
-                payload = p.get("payload") or p.get("Payload")
-                if isinstance(payload, str):
-                    try:
-                        nb_bytes = base64.b64decode(payload)
-                        break
-                    except Exception:
-                        nb_bytes = payload.encode("utf-8")
-        # fallback: top-level 'payload'
-        if nb_bytes is None and isinstance(gd_json.get("payload"), str):
-            try:
-                nb_bytes = base64.b64decode(gd_json["payload"])
-            except Exception:
-                nb_bytes = gd_json["payload"].encode("utf-8")
-    else:
-        # If the response wasn't JSON, try to treat it as raw ipynb bytes
+    # Try POST then poll/ follow Location if 202 or wait-and-retry until 200 or timeout
+    gd_resp = None
+    poll_attempts = 12
+    poll_sleep = 2
+    for attempt in range(1, poll_attempts + 1):
         try:
-            nb_bytes = gd_resp.content
-        except Exception:
-            nb_bytes = None
-
-    # If we still don't have bytes, attempt to parse the text for an obvious Base64 blob
-    if nb_bytes is None and isinstance(gd_resp.text, str):
-        m = re.search(r'InlineBase64[^:\n\r]*[:=]\s*(")?([A-Za-z0-9+/=\n\r]+)\1?', gd_resp.text)
-        if m:
-            try:
-                nb_bytes = base64.b64decode(m.group(2))
-            except Exception:
-                pass
-
-    if nb_bytes:
-        out_path = ".state/generate_output.executed.ipynb"
-        open(out_path, "wb").write(nb_bytes)
-        print("Wrote executed notebook ->", out_path, flush=True)
-
-        # Print a brief summary of the first code cells and their outputs to the action log.
-        # This uses a lightweight JSON fallback so no extra dependencies are required.
-        try:
-            try:
-                import nbformat as _nbf  # optional, nicer parsing if available
-                nb = _nbf.reads(nb_bytes.decode("utf-8"), as_version=4)
-                cells = nb.cells if isinstance(nb.cells, list) else []
-            except Exception:
-                nb_json = json.loads(nb_bytes.decode("utf-8"))
-                cells = nb_json.get("cells") if isinstance(nb_json.get("cells"), list) else []
-
-            print(f"notebook contains {len(cells)} cells", flush=True)
-            for i, cell in enumerate(cells[:16], start=1):
-                # defensive checks because some returned notebooks include nulls or unexpected shapes
-                if not isinstance(cell, dict):
-                    print(f"cell {i}: <non-dict cell: {type(cell)}> (skipping)", flush=True)
-                    continue
-
-                ctype = cell.get("cell_type", "<unknown>")
-                src_val = cell.get("source") or ""
-                if isinstance(src_val, list):
-                    src = "".join([str(s) for s in src_val])
-                else:
-                    src = str(src_val)
-
-                out_snip = ""
-                try:
-                    outputs = cell.get("outputs") or []
-                    if not isinstance(outputs, list):
-                        outputs = []
-                    if outputs:
-                        # be defensive about output entries which can be strings, null, or dicts
-                        first_out = outputs[0]
-                        if isinstance(first_out, dict):
-                            # common places for textual content
-                            out_snip = first_out.get("text") or first_out.get("ename") or ""
-                            if not out_snip:
-                                # try common nested data formats
-                                data = first_out.get("data") or {}
-                                if isinstance(data, dict):
-                                    out_snip = data.get("text/plain") or data.get("application/json") or ""
-                            if not out_snip:
-                                # fallback to stringifying a small portion
-                                out_snip = str(first_out)[:400]
-                        else:
-                            # first_out might be a simple string or None
-                            out_snip = str(first_out)[:400]
-                except Exception as e:
-                    out_snip = f"<error reading outputs: {e}>"
-
-                print(f"cell {i} [{ctype}] src_snippet={str(src)[:240]!r} out_snippet={str(out_snip)[:240]!r}", flush=True)
+            resp = requests.post(getdef_url, headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"}, timeout=30)
         except Exception as e:
-            print("Failed to parse notebook outputs (robust fallback):", e, flush=True)
+            print(f"GetDefinition POST failed on attempt {attempt}: {e}", flush=True)
+            resp = None
+
+        if resp is None:
+            time.sleep(poll_sleep)
+            continue
+
+        # If service returned a "follow this location" header, follow it
+        poll_loc = resp.headers.get("Location") or resp.headers.get("Operation-Location") or resp.headers.get("Azure-AsyncOperation")
+        if resp.status_code == 200:
+            gd_resp = resp
+            break
+        if resp.status_code in (201, 202):
+            # if Location header present, GET it until 200
+            if poll_loc:
+                try:
+                    pr = requests.get(poll_loc, headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"}, timeout=30)
+                    if pr.status_code == 200:
+                        gd_resp = pr
+                        break
+                    else:
+                        print(f"GetDefinition poll GET status {pr.status_code} (attempt {attempt})", flush=True)
+                except Exception as e:
+                    print(f"GetDefinition poll GET failed: {e}", flush=True)
+            else:
+                # No follow link — wait a bit and retry POST (as service may be preparing result)
+                print(f"GetDefinition returned {resp.status_code}; will retry (attempt {attempt})", flush=True)
+        else:
+            # Unexpected status; still capture response and break
+            print(f"GetDefinition returned unexpected status {resp.status_code}", flush=True)
+            gd_resp = resp
+            break
+
+        time.sleep(poll_sleep)
+
+    if gd_resp is None:
+        print("GetDefinition did not return a ready response after polling; proceeding with last received response if any", flush=True)
+        gd_resp = resp  # may be None
+
+    if not gd_resp:
+        print("No GetDefinition response available to parse.", flush=True)
     else:
-        print("GetDefinition did not return an InlineBase64 payload or ipynb content. Response text snippet:", gd_resp.text[:2000], flush=True)
+        print("GetDefinition HTTP", gd_resp.status_code, flush=True)
+
+        # Try to parse JSON; many shapes possible
+        nb_bytes = None
+        try:
+            gd_json = gd_resp.json()
+        except Exception:
+            gd_json = None
+
+        if isinstance(gd_json, dict):
+            defn = gd_json.get("definition") or gd_json.get("Definition") or {}
+            parts = defn.get("parts") if isinstance(defn, dict) else None
+            if parts and isinstance(parts, list):
+                for p in parts:
+                    payload = p.get("payload") or p.get("Payload")
+                    if isinstance(payload, str):
+                        try:
+                            nb_bytes = base64.b64decode(payload)
+                            break
+                        except Exception:
+                            nb_bytes = payload.encode("utf-8")
+            # fallback: top-level 'payload'
+            if nb_bytes is None and isinstance(gd_json.get("payload"), str):
+                try:
+                    nb_bytes = base64.b64decode(gd_json["payload"])
+                except Exception:
+                    nb_bytes = gd_json["payload"].encode("utf-8")
+        else:
+            # If the response wasn't JSON, treat it as raw ipynb bytes
+            try:
+                nb_bytes = gd_resp.content
+            except Exception:
+                nb_bytes = None
+
+        # Last resort: try to find an InlineBase64 blob in the text
+        if nb_bytes is None and isinstance(gd_resp.text, str):
+            m = re.search(r'InlineBase64[^:\n\r]*[:=]\s*(")?([A-Za-z0-9+/=\n\r]+)\1?', gd_resp.text)
+            if m:
+                try:
+                    nb_bytes = base64.b64decode(m.group(2))
+                except Exception:
+                    nb_bytes = None
+
+        if nb_bytes:
+            out_path = ".state/generate_output.executed.ipynb"
+            open(out_path, "wb").write(nb_bytes)
+            print("Wrote executed notebook ->", out_path, flush=True)
+
+            # Robust printing of cell sources and first output snippet (defensive against nulls)
+            try:
+                # Prefer nbformat if available; otherwise json fallback
+                try:
+                    import nbformat as _nbf
+                    nb = _nbf.reads(nb_bytes.decode("utf-8"), as_version=4)
+                    cells = nb.cells if isinstance(nb.cells, list) else []
+                except Exception:
+                    nb_json = json.loads(nb_bytes.decode("utf-8"))
+                    cells = nb_json.get("cells") if isinstance(nb_json.get("cells"), list) else []
+
+                print(f"notebook contains {len(cells)} cells", flush=True)
+                for i, cell in enumerate(cells[:16], start=1):
+                    if not isinstance(cell, dict):
+                        print(f"cell {i}: <non-dict cell: {type(cell)}> (skipping)", flush=True)
+                        continue
+
+                    ctype = cell.get("cell_type", "<unknown>")
+                    src_val = cell.get("source") or ""
+                    if isinstance(src_val, list):
+                        src = "".join([str(s) for s in src_val])
+                    else:
+                        src = str(src_val)
+
+                    out_snip = ""
+                    try:
+                        outputs = cell.get("outputs") or []
+                        if not isinstance(outputs, list):
+                            outputs = []
+                        if outputs:
+                            first_out = outputs[0]
+                            if first_out is None:
+                                out_snip = "<null output>"
+                            elif isinstance(first_out, dict):
+                                # common textual locations
+                                out_snip = first_out.get("text") or ""
+                                if not out_snip:
+                                    data = first_out.get("data") or {}
+                                    if isinstance(data, dict):
+                                        out_snip = data.get("text/plain") or data.get("application/json") or ""
+                                if not out_snip:
+                                    # fallback to known fields
+                                    out_snip = first_out.get("ename") or first_out.get("evalue") or ""
+                                if not out_snip:
+                                    out_snip = str(first_out)[:400]
+                            else:
+                                out_snip = str(first_out)[:400]
+                    except Exception as e:
+                        out_snip = f"<error reading outputs: {e}>"
+
+                    print(f"cell {i} [{ctype}] src_snippet={str(src)[:240]!r} out_snippet={str(out_snip)[:240]!r}", flush=True)
+            except Exception as e:
+                print("Failed to parse notebook outputs (robust fallback):", e, flush=True)
+        else:
+            print("GetDefinition did not return an InlineBase64 payload or ipynb content. Response text snippet:", (gd_resp.text or "")[:2000], flush=True)
 except Exception as e:
     print("Error while fetching notebook definition:", e, file=sys.stderr, flush=True)
-# --- END: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (easily removable) ---
+# --- END: FETCH EXECUTED NOTEBOOK DEBUG BLOCK (robust, polling, easily removable) ---
 
 # exit non-zero only when the API call failed (non-2xx) or instance explicitly failed
 if instance_json and isinstance(instance_json, dict) and instance_json.get("status") and instance_json.get("status").lower() == "failed":
