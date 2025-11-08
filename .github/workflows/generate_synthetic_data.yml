@@ -33,18 +33,7 @@ jobs:
       - name: Prepare notebooks_to_create payload
         run: |
           mkdir -p .state
-          python - <<'PY'
-import json
-payload = [
-  {
-    "displayName": "0.GenerateData",
-    "description": "Synthetic data generation",
-    "file": "notebooks/generate_data.ipynb",
-    "workspaces": ["BFF Controller"]
-  }
-]
-open('.state/notebooks_to_create.json', 'w', encoding='utf-8').write(json.dumps(payload, indent=2))
-PY
+          echo '[{"displayName":"0.GenerateData","description":"Synthetic data generation","file":"notebooks/generate_data.ipynb","workspaces":["BFF Controller"]}]' > .state/notebooks_to_create.json
 
       - name: Provision notebook(s)
         env:
