@@ -1,255 +1,234 @@
-import os
-import json
+#!/usr/bin/env python3
+"""
+Notebook provisioning helper with upload support.
+
+Behavior:
+- Read a JSON file (--notebooks-file) listing notebooks to create.
+  Each entry should have: displayName, description (opt), file, workspaces (list or string).
+- Authenticate using client credentials (TENANT_ID, CLIENT_ID, CLIENT_SECRET).
+- For each notebook->workspace:
+  - find workspace id by displayName (via GET /workspaces)
+  - base64-encode the .ipynb and POST to /workspaces/{workspace_id}/items
+  - if the create returns 202, poll /workspaces/{workspace_id}/items until the notebook appears (best-effort)
+- Write .state/notebooks_created.json with one entry per notebook->workspace mapping including status, workspace_id, notebook_id, and server response info.
+
+Notes:
+- This script performs network/API calls and requires environment variables:
+    TENANT_ID, CLIENT_ID, CLIENT_SECRET
+- The script is intentionally straightforward and focuses only on upload behavior.
+"""
+from __future__ import annotations
+import argparse
 import base64
+import json
+import os
 import sys
-import requests
 import time
-import logging
+from pathlib import Path
 
-logging.basicConfig(level=logging.INFO)
+try:
+    import requests
+except Exception:
+    print("Missing dependency: requests. Install via pip install requests", file=sys.stderr)
+    sys.exit(1)
 
-# === CONFIGURATION ===
-notebooks_to_create = [
-    {
-        "displayName": "1.GenerateData",
-        "description": "Synthetic data generation",
-        "file": "notebooks/generate_data.ipynb",
-        "lakehouses": ["DataSourceLakehouse"],
-        "warehouses": [],
-    },
-    {
-        "displayName": "2.IngestData",
-        "description": "Initial data load",
-        "file": "notebooks/ingest_data.ipynb",
-        "lakehouses": ["DataSourceLakehouse", "BenchmarkLakehouse"],
-        "warehouses": ["BenchmarkWarehouse"],
-    },
-    {
-        "displayName": "3.ApplyUpdates",
-        "description": "Batch or CDC",
-        "file": "notebooks/apply_updates.ipynb",
-        "lakehouses": ["DataSourceLakehouse", "BenchmarkLakehouse"],
-        "warehouses": ["BenchmarkWarehouse"],
-    },
-    {
-        "displayName": "4.RunQueries",
-        "description": "Capture query benchmarking timings",
-        "file": "notebooks/run_queries.ipynb",
-        "lakehouses": ["BenchmarkLakehouse"],
-        "warehouses": ["BenchmarkWarehouse"],
-    },
-    {
-        "displayName": "5.VisualizeMetrics",
-        "description": "Display metrics from capture",
-        "file": "notebooks/visualize_metrics.ipynb",
-        "lakehouses": ["BenchmarkLakehouse"],
-        "warehouses": ["BenchmarkWarehouse"],
-    },
-    {
-        "displayName": "86.ResetHelper",
-        "description": "Delete elements for re-provisioning",
-        "file": "notebooks/reset_helper_notebook.ipynb",
-        "lakehouses": ["DataSourceLakehouse", "BenchmarkLakehouse"],
-        "warehouses": ["BenchmarkWarehouse"],
-    },
-]
-lakehouse_name = "DataSourceLakehouse"
-workspace_name = "FabricBenchmarking"
-MAX_ATTEMPTS = 20
-SLEEP_SECONDS = 10
-UPDATE_ATTEMPTS = 3
-UPDATE_SLEEP_SECONDS = 3
+# constants
+STATE_DIR = Path(".state")
+STATE_DIR.mkdir(exist_ok=True)
+OUT_FILE = STATE_DIR / "notebooks_created.json"
 
-# === AUTHENTICATION ===
-tenant_id = os.environ["TENANT_ID"]
-client_id = os.environ["CLIENT_ID"]
-client_secret = os.environ["CLIENT_SECRET"]
+OAUTH_TIMEOUT = 30
+API_BASE = "https://api.fabric.microsoft.com/v1"
+UPLOAD_TIMEOUT = 60
+POLL_SLEEP = 5
+POLL_ATTEMPTS = 20
 
-token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
-token_data = {
+# parse args
+p = argparse.ArgumentParser(description="Provision and upload notebooks to Fabric workspaces.")
+p.add_argument("--notebooks-file", required=True, help="JSON file with notebooks to create")
+args = p.parse_args()
+
+nb_file = Path(args.notebooks_file)
+if not nb_file.exists():
+    print(f"Notebooks file not found: {nb_file}", file=sys.stderr)
+    sys.exit(2)
+
+# load notebooks list
+try:
+    notebooks = json.loads(nb_file.read_text(encoding="utf-8"))
+except Exception as e:
+    print(f"Failed to read/parse notebooks file {nb_file}: {e}", file=sys.stderr)
+    sys.exit(3)
+
+# read auth env
+tenant = os.environ.get("TENANT_ID")
+client = os.environ.get("CLIENT_ID")
+secret = os.environ.get("CLIENT_SECRET")
+if not (tenant and client and secret):
+    print("TENANT_ID, CLIENT_ID, and CLIENT_SECRET environment variables are required.", file=sys.stderr)
+    sys.exit(4)
+
+# obtain AAD token via client credentials
+token_url = f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
+data = {
     "grant_type": "client_credentials",
-    "client_id": client_id,
-    "client_secret": client_secret,
+    "client_id": client,
+    "client_secret": secret,
     "scope": "https://api.fabric.microsoft.com/.default"
 }
-token_resp = requests.post(token_url, data=token_data)
-token_resp.raise_for_status()
-access_token = token_resp.json()["access_token"]
-headers = {
-    "Authorization": f"Bearer {access_token}",
-    "Content-Type": "application/json"
-}
+try:
+    r = requests.post(token_url, data=data, timeout=OAUTH_TIMEOUT)
+    if r.status_code != 200:
+        print(f"Failed to obtain AAD token: {r.status_code} {r.text}", file=sys.stderr)
+        sys.exit(5)
+    token = r.json().get("access_token")
+    if not token:
+        print("AAD token response missing access_token", file=sys.stderr)
+        sys.exit(6)
+except Exception as e:
+    print(f"Error obtaining AAD token: {e}", file=sys.stderr)
+    sys.exit(7)
 
-# === RESOLVE WORKSPACE ID ===
-ws_resp = requests.get("https://api.fabric.microsoft.com/v1/workspaces", headers=headers)
-ws_resp.raise_for_status()
-workspace_id = next(
-    (w["id"] for w in ws_resp.json()["value"] if w["displayName"] == workspace_name),
-    None
-)
-if not workspace_id:
-    raise Exception(f"Workspace '{workspace_name}' not found.")
+headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
-# === RESOLVE LAKEHOUSE IDS ===
-lh_resp = requests.get(f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/lakehouses", headers=headers)
-lh_resp.raise_for_status()
-lakehouses_by_name = {l["displayName"]: l["id"] for l in lh_resp.json()["value"]}
+# fetch workspaces list once and build map displayName -> id
+try:
+    wr = requests.get(f"{API_BASE}/workspaces", headers=headers, timeout=30)
+    wr.raise_for_status()
+    workspace_list = wr.json().get("value", [])
+    workspaces_by_name = {w.get("displayName"): w.get("id") for w in workspace_list if w.get("displayName")}
+except Exception as e:
+    print(f"Failed to list workspaces: {e}", file=sys.stderr)
+    workspaces_by_name = {}
 
-# === RESOLVE WAREHOUSE IDS ===
-wh_resp = requests.get(f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/warehouses", headers=headers)
-wh_resp.raise_for_status()
-warehouses_by_name = {w["displayName"]: w["id"] for w in wh_resp.json()["value"]}
+results = []
 
-print(f"[DEBUG] Using workspace_id: {workspace_id}", flush=True)
-print(f"[DEBUG] Lakehouses found: {lakehouses_by_name}", flush=True)
-print(f"[DEBUG] Warehouses found: {warehouses_by_name}", flush=True)
+# helper inline: poll for item presence
+def _poll_for_item(workspace_id: str, target_display: str) -> str | None:
+    items_url = f"{API_BASE}/workspaces/{workspace_id}/items"
+    for attempt in range(1, POLL_ATTEMPTS + 1):
+        try:
+            ir = requests.get(items_url, headers=headers, timeout=30)
+            if ir.status_code == 200:
+                vals = ir.json().get("value", [])
+                for it in vals:
+                    if it.get("displayName") == target_display and it.get("type") == "Notebook":
+                        return it.get("id")
+        except Exception:
+            pass
+        time.sleep(POLL_SLEEP)
+    return None
 
-# === PROVISION NOTEBOOKS ===
-os.makedirs('.state', exist_ok=True)
-notebook_ids_path = os.path.join('.state', 'notebook_ids.txt')
-all_notebook_ids = []
+# process each notebook entry
+for nb in notebooks:
+    display = nb.get("displayName") or nb.get("displayname") or nb.get("name") or "unnamed"
+    desc = nb.get("description", "") or ""
+    file_path = nb.get("file")
+    workspaces = nb.get("workspaces") or nb.get("workspace") or []
+    if isinstance(workspaces, str):
+        workspaces = [workspaces]
 
-for nb in notebooks_to_create:
-    notebook_display_name = nb["displayName"]
-    notebook_path = nb["file"]
-    notebook_description = nb["description"]
-
-    print(f"\nProvisioning notebook: {notebook_display_name} from {notebook_path}", flush=True)
-
-    if not os.path.exists(notebook_path):
-        logging.warning(f"Notebook file not found: {notebook_path}. Skipping.")
+    if not workspaces:
+        results.append({
+            "displayName": display,
+            "workspace": None,
+            "file": file_path,
+            "status": "skipped_no_workspace",
+            "description": desc
+        })
         continue
 
-    with open(notebook_path, "rb") as f:
-        ipynb_encoded = base64.b64encode(f.read()).decode("utf-8")
+    # read notebook bytes once (if present)
+    ipynb_bytes = None
+    if file_path:
+        src = Path(file_path)
+        if src.exists():
+            try:
+                ipynb_bytes = src.read_bytes()
+            except Exception as e:
+                # will record per-workspace failure below
+                ipynb_bytes = None
 
-    # === UPLOAD NOTEBOOK ===
-    upload_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/items"
-    payload = {
-        "displayName": notebook_display_name,
-        "type": "Notebook",
-        "description": notebook_description,
-        "definition": {
-            "format": "ipynb",
-            "parts": [
-                {
-                    "path": os.path.basename(notebook_path),
-                    "payload": ipynb_encoded,
-                    "payloadType": "InlineBase64"
-                }
-            ]
+    for ws in workspaces:
+        entry = {
+            "displayName": display,
+            "workspace": ws,
+            "file": file_path,
+            "description": desc,
+            "workspace_id": None,
+            "notebook_id": None,
+            "status": None,
+            "response_code": None,
+            "response_text": None
         }
-    }
-    print("Upload payload:", json.dumps(payload, indent=2), flush=True)
-    upload_resp = requests.post(upload_url, headers=headers, data=json.dumps(payload))
-    print("Status:", upload_resp.status_code, flush=True)
-    print("Response:", upload_resp.text, flush=True)
 
-    notebook_id = None
-    notebook_id_saved = False
-
-    if upload_resp.status_code in (200, 201):
-        notebook_id = upload_resp.json()["id"]
-        all_notebook_ids.append(notebook_id)
-        notebook_id_saved = True
-    elif upload_resp.status_code == 202:
-        print(f"Notebook creation is asynchronous. Waiting for {notebook_display_name} to appear in workspace...", flush=True)
-        attempts = 0
-        while attempts < MAX_ATTEMPTS and not notebook_id:
-            time.sleep(SLEEP_SECONDS)
-            print(f"Polling /items attempt {attempts+1}...", flush=True)
-            items_resp = requests.get(f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/items", headers=headers)
-            items_resp.raise_for_status()
-            items = items_resp.json().get("value", [])
-            for item in items:
-                if item.get("displayName") == notebook_display_name and item.get("type") == "Notebook":
-                    notebook_id = item.get("id")
-                    break
-            attempts += 1
-        if notebook_id:
-            all_notebook_ids.append(notebook_id)
-            notebook_id_saved = True
-        else:
-            print(f"ERROR: Notebook {notebook_display_name} was not provisioned after max attempts in /items.", flush=True)
+        ws_id = workspaces_by_name.get(ws)
+        if not ws_id:
+            entry["status"] = "workspace_not_found"
+            results.append(entry)
             continue
-    else:
-        print(f"Notebook {notebook_display_name} was not created. Skipping.", flush=True)
-        continue
+        entry["workspace_id"] = ws_id
 
-    # Poll for notebook to appear in /notebooks endpoint
-    attempts = 0
-    ready_count = 0
-    while attempts < MAX_ATTEMPTS and ready_count < 2:
-        time.sleep(SLEEP_SECONDS)
-        print(f"Polling for {notebook_display_name} in /notebooks (attempt {attempts+1})...", flush=True)
-        nb_resp = requests.get(f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks", headers=headers)
-        nb_resp.raise_for_status()
-        notebooks = nb_resp.json().get("value", [])
-        found = any(nb.get("id") == notebook_id for nb in notebooks)
-        if found:
-            ready_count += 1
-        else:
-            ready_count = 0
-        attempts += 1
+        if not ipynb_bytes:
+            entry["status"] = "missing_source_or_read_failed"
+            results.append(entry)
+            continue
 
-    if ready_count < 2:
-        print("ERROR: Notebook did not appear ready in /notebooks endpoint after max attempts.", flush=True)
-        continue
-
-    print("Pausing to ensure backend is ready.")
-    time.sleep(5)
-
-    # === UPDATE DEFAULT LAKEHOUSE FOR THE NOTEBOOK ===
-    print(f"Updating default lakehouse for notebook {notebook_id} ...", flush=True)
-    lakehouse_ids = [
-        lakehouses_by_name.get(lh)
-        for lh in nb.get("lakehouses", [])
-        if lakehouses_by_name.get(lh)
-    ]
-    # For now, only attempt to set the first lakehouse (as API supports)
-    update_url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/notebooks/{notebook_id}/updateDefinition"
-    update_payload = {
-        "name": notebook_display_name,
-        "definition": {
-            "format": "ipynb",
-            "parts": [
-                {
-                    "path": os.path.basename(notebook_path),
-                    "payload": ipynb_encoded,
-                    "payloadType": "InlineBase64"
+        # build upload payload
+        try:
+            ipynb_b64 = base64.b64encode(ipynb_bytes).decode("utf-8")
+            upload_url = f"{API_BASE}/workspaces/{ws_id}/items"
+            payload = {
+                "displayName": display,
+                "type": "Notebook",
+                "description": desc,
+                "definition": {
+                    "format": "ipynb",
+                    "parts": [
+                        {
+                            "path": Path(file_path).name,
+                            "payload": ipynb_b64,
+                            "payloadType": "InlineBase64"
+                        }
+                    ]
                 }
-            ]
-        },
-        "defaultLakehouse": lakehouse_ids[0] if lakehouse_ids else None
-    }
+            }
+            upl = requests.post(upload_url, headers=headers, json=payload, timeout=UPLOAD_TIMEOUT)
+            entry["response_code"] = upl.status_code
+            entry["response_text"] = upl.text[:2000] if upl.text else ""
+            if upl.status_code in (200, 201):
+                try:
+                    entry["notebook_id"] = upl.json().get("id")
+                except Exception:
+                    entry["notebook_id"] = None
+                entry["status"] = "created"
+                results.append(entry)
+                continue
+            if upl.status_code == 202:
+                # best-effort poll for the item to appear in /items
+                nid = _poll_for_item(ws_id, display)
+                if nid:
+                    entry["notebook_id"] = nid
+                    entry["status"] = "created_async"
+                else:
+                    entry["status"] = "accepted_no_completion"
+                results.append(entry)
+                continue
+            # other error
+            entry["status"] = "upload_failed"
+            results.append(entry)
+        except Exception as e:
+            entry["status"] = "exception_during_upload"
+            entry["response_text"] = str(e)
+            results.append(entry)
 
-    update_success = False
-    for attempt in range(UPDATE_ATTEMPTS):
-        update_resp = requests.post(update_url, headers=headers, json=update_payload)
-        print(f"Lakehouse update attempt {attempt+1} status: {update_resp.status_code}", flush=True)
-        print("Lakehouse update response:", update_resp.text, flush=True)
-        if update_resp.status_code in (200, 204):
-            print("Successfully updated default lakehouse for notebook.", flush=True)
-            update_success = True
-            break
-        elif update_resp.status_code == 202:
-            print(f"Lakehouse update accepted but still processing (202). Retrying in {UPDATE_SLEEP_SECONDS} seconds...", flush=True)
-            time.sleep(UPDATE_SLEEP_SECONDS)
-        elif update_resp.status_code == 404:
-            print(f"Notebook not ready for update (404). Retrying in {UPDATE_SLEEP_SECONDS} seconds...", flush=True)
-            time.sleep(UPDATE_SLEEP_SECONDS)
-        else:
-            print("ERROR: Unexpected response during lakehouse update.", flush=True)
-            break
+# write results
+try:
+    OUT_FILE.write_text(json.dumps(results, indent=2), encoding="utf-8")
+    print(f"Wrote notebook provisioning state -> {OUT_FILE}")
+    print(f"Processed {len(results)} notebook->workspace entries.")
+except Exception as e:
+    print(f"Failed to write state file {OUT_FILE}: {e}", file=sys.stderr)
+    sys.exit(8)
 
-    if not update_success:
-        logging.warning(
-            f"Failed to update default lakehouse for {notebook_display_name} after multiple attempts. "
-            "Please set the default lakehouse for this notebook according to the README."
-        )
-
-# Save all notebook IDs
-with open(notebook_ids_path, "w") as f:
-    for notebook_id in all_notebook_ids:
-        f.write(f"{notebook_id}\n")
-print(f"All notebook IDs saved to {notebook_ids_path}", flush=True)
+sys.exit(0)
