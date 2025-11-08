@@ -305,27 +305,53 @@ try:
             try:
                 import nbformat as _nbf  # optional, nicer parsing if available
                 nb = _nbf.reads(nb_bytes.decode("utf-8"), as_version=4)
-                cells = nb.cells
+                cells = nb.cells if isinstance(nb.cells, list) else []
             except Exception:
                 nb_json = json.loads(nb_bytes.decode("utf-8"))
-                cells = nb_json.get("cells", [])
+                cells = nb_json.get("cells") if isinstance(nb_json.get("cells"), list) else []
 
-            for i, cell in enumerate(cells[:8], start=1):
-                ctype = cell.get("cell_type")
+            print(f"notebook contains {len(cells)} cells", flush=True)
+            for i, cell in enumerate(cells[:16], start=1):
+                # defensive checks because some returned notebooks include nulls or unexpected shapes
+                if not isinstance(cell, dict):
+                    print(f"cell {i}: <non-dict cell: {type(cell)}> (skipping)", flush=True)
+                    continue
+
+                ctype = cell.get("cell_type", "<unknown>")
                 src_val = cell.get("source") or ""
                 if isinstance(src_val, list):
-                    src = "".join(src_val)
+                    src = "".join([str(s) for s in src_val])
                 else:
                     src = str(src_val)
+
                 out_snip = ""
-                if ctype == "code":
+                try:
                     outputs = cell.get("outputs") or []
+                    if not isinstance(outputs, list):
+                        outputs = []
                     if outputs:
-                        o = outputs[0]
-                        out_snip = o.get("text") or o.get("data", {}).get("text/plain", "") or str(o)[:400]
-                print(f"cell {i} [{ctype}] src_snippet={str(src)[:200]!r} out_snippet={str(out_snip)[:200]!r}", flush=True)
+                        # be defensive about output entries which can be strings, null, or dicts
+                        first_out = outputs[0]
+                        if isinstance(first_out, dict):
+                            # common places for textual content
+                            out_snip = first_out.get("text") or first_out.get("ename") or ""
+                            if not out_snip:
+                                # try common nested data formats
+                                data = first_out.get("data") or {}
+                                if isinstance(data, dict):
+                                    out_snip = data.get("text/plain") or data.get("application/json") or ""
+                            if not out_snip:
+                                # fallback to stringifying a small portion
+                                out_snip = str(first_out)[:400]
+                        else:
+                            # first_out might be a simple string or None
+                            out_snip = str(first_out)[:400]
+                except Exception as e:
+                    out_snip = f"<error reading outputs: {e}>"
+
+                print(f"cell {i} [{ctype}] src_snippet={str(src)[:240]!r} out_snippet={str(out_snip)[:240]!r}", flush=True)
         except Exception as e:
-            print("Failed to parse notebook outputs (fallback JSON parser):", e, flush=True)
+            print("Failed to parse notebook outputs (robust fallback):", e, flush=True)
     else:
         print("GetDefinition did not return an InlineBase64 payload or ipynb content. Response text snippet:", gd_resp.text[:2000], flush=True)
 except Exception as e:
