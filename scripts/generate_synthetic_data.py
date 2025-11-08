@@ -1,17 +1,4 @@
 #!/usr/bin/env python3
-import os, requests, json
-t = requests.post(f"https://login.microsoftonline.com/{os.environ['TENANT_ID']}/oauth2/v2.0/token",
-    data={"grant_type":"client_credentials","client_id":os.environ['CLIENT_ID'],"client_secret":os.environ['CLIENT_SECRET'],"scope":"https://api.fabric.microsoft.com/.default"}).json()['access_token']
-h = {"Authorization":f"Bearer {t}","Accept":"application/json"}
-url = "https://api.fabric.microsoft.com/v1/workspaces/edbfa4bb-0818-4af3-9fe3-1450116a8634/items/b6895807-498b-464d-9a7d-e3a2a96beeee/jobs/instances/c473d277-b668-4ad4-a282-194ebe25f246"
-r = requests.get(url, headers=h, timeout=30)
-print(r.status_code)
-print(r.headers)
-try:
-    print(json.dumps(r.json(), indent=2)[:5000])
-except Exception:
-    print(r.text[:5000])
-
 import os
 import json
 import sys
@@ -51,21 +38,32 @@ hdr = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}
 
 # derive workspace_id from workspace display name
 r = requests.get(f"{API_BASE}/workspaces", headers=hdr, timeout=30)
+if r.status_code != 200:
+    print("Failed to list workspaces:", r.status_code, r.text[:1000], file=sys.stderr)
+    sys.exit(6)
+
 ws_list = r.json().get("value", [])
 ws_id = next((w.get("id") for w in ws_list if w.get("displayName") == ws_name), None)
 if not ws_id:
-    print(f"Workspace '{ws_name}' not found", file=sys.stderr)
-    sys.exit(6)
+    print(f"Workspace '{ws_name}' not found in /workspaces", file=sys.stderr)
+    sys.exit(7)
 
 # derive artifact_id from notebook displayName
 items_r = requests.get(f"{API_BASE}/workspaces/{ws_id}/items", headers=hdr, timeout=30)
-items = items_r.json().get("value", [])
-artifact_id = next((it.get("id") for it in items if it.get("displayName") == nb_display and it.get("type") == "Notebook"), None)
-if not artifact_id:
-    print(f"Notebook '{nb_display}' not found", file=sys.stderr)
-    sys.exit(7)
+if items_r.status_code != 200:
+    print(f"Failed to list items for workspace {ws_id}: {items_r.status_code} {items_r.text[:1000]}", file=sys.stderr)
+    sys.exit(8)
 
-# build execution parameters (keep DATASETS_PARAM etc.)
+items = items_r.json().get("value", [])
+artifact_id = next(
+    (it.get("id") for it in items if it.get("displayName") == nb_display and it.get("type") == "Notebook"),
+    None,
+)
+if not artifact_id:
+    print(f"Notebook '{nb_display}' not found in workspace '{ws_name}' items", file=sys.stderr)
+    sys.exit(9)
+
+# build execution parameters
 exec_params = {}
 if isinstance(params, dict):
     for k, v in params.items():
@@ -75,27 +73,73 @@ if isinstance(params, dict):
             value_str = json.dumps(v, ensure_ascii=False)
         exec_params[str(k)] = {"value": value_str, "type": "string"}
 
+# Ensure DATASETS_PARAM execution parameter exists (notebook expects this)
 datasets_value = params.get("DATASETS_PARAM") or params.get("datasets") or params.get("DATASETS") or []
 exec_params["DATASETS_PARAM"] = {"value": json.dumps(datasets_value, ensure_ascii=False), "type": "string"}
 
-# conf payload so runtime sees spark.notebook.parameters
+# Build configuration.conf payload so runtime sees spark.notebook.parameters exactly like the notebook's %%configure cell
 conf_payload = {}
 conf_payload["DATASETS_PARAM"] = datasets_value
+
+# copy common keys if present
 for key in ("PUSH_TO_AZURE_SQL", "AZURE_SQL_SERVER", "AZURE_SQL_DB", "AZURE_SQL_SCHEMA", "distribution", "seed"):
     if key in params:
         conf_payload[key] = params[key]
+
+# preserve other top-level keys
 for k, v in params.items():
     if k not in conf_payload:
         conf_payload[k] = v
 
+# default lakehouse name (match notebook cell)
 lakehouse_name = params.get("defaultLakehouse", {}).get("name") if isinstance(params.get("defaultLakehouse"), dict) else params.get("defaultLakehouse")
 if not lakehouse_name:
     lakehouse_name = "DataSourceLakehouse"
+
+# Resolve lakehouse id (so runtime definitely targets the intended lakehouse)
+lakehouse_id = None
+lh_r = requests.get(f"{API_BASE}/workspaces/{ws_id}/lakehouses", headers=hdr, timeout=30)
+if lh_r.status_code == 200:
+    for lh in lh_r.json().get("value", []):
+        if lh.get("displayName") == lakehouse_name:
+            lakehouse_id = lh.get("id")
+            break
+
+# Resolve environment id if the params specify an environment name (optional)
+env_id = None
+env_name = None
+# Accept environment config from params (common shapes)
+if isinstance(params.get("configuration"), dict) and isinstance(params["configuration"].get("environment"), dict):
+    env_name = params["configuration"]["environment"].get("name") or params["configuration"]["environment"].get("displayName")
+elif isinstance(params.get("environment"), dict):
+    env_name = params["environment"].get("name")
+elif params.get("environment"):
+    env_name = params.get("environment")
+if env_name:
+    env_r = requests.get(f"{API_BASE}/workspaces/{ws_id}/environments", headers=hdr, timeout=30)
+    if env_r.status_code == 200:
+        for e in env_r.json().get("value", []):
+            if e.get("displayName") == env_name or e.get("name") == env_name:
+                env_id = e.get("id")
+                break
+
+# Build full configuration including defaultLakehouse id/workspaceId and environment if found
 conf_configuration = {
     "conf": {"spark.notebook.parameters": json.dumps(conf_payload, ensure_ascii=False)},
-    "defaultLakehouse": {"name": lakehouse_name},
+    "defaultLakehouse": {"name": lakehouse_name}
 }
+if lakehouse_id:
+    conf_configuration["defaultLakehouse"]["id"] = lakehouse_id
+    conf_configuration["defaultLakehouse"]["workspaceId"] = ws_id
 
+if env_id or env_name:
+    conf_configuration["environment"] = {}
+    if env_id:
+        conf_configuration["environment"]["id"] = env_id
+    if env_name:
+        conf_configuration["environment"]["name"] = env_name
+
+# POST RunNotebook
 payload = {
     "executionData": {
         "parameters": exec_params,
@@ -109,7 +153,10 @@ resp = requests.post(url, headers=hdr, json=payload, timeout=120)
 print("Run response status:", resp.status_code, flush=True)
 
 loc = resp.headers.get("Location") or resp.headers.get("Operation-Location") or resp.headers.get("Azure-AsyncOperation")
-print("Run response location/op:", loc or resp.text[:1000], flush=True)
+if loc:
+    print("Run response location/op:", loc, flush=True)
+else:
+    print(resp.text[:1000], flush=True)
 
 # poll instance until terminal
 instance_json = None
@@ -139,53 +186,20 @@ os.makedirs(".state", exist_ok=True)
 run_result = {"status_code": resp.status_code, "location": loc, "instance": instance_json}
 open(".state/notebook_run_result.json", "w", encoding="utf-8").write(json.dumps(run_result, indent=2))
 
-# --- New debug: attempt to fetch activities and outputs for the instance (best-effort)
+# Try to fetch activities/outputs (best-effort)
 if loc:
     try:
         inst_activities = requests.get(f"{loc}/activities", headers=hdr, timeout=30)
-        print("/activities status:", inst_activities.status_code, flush=True)
-        try:
-            ajson = inst_activities.json()
-            print("activities keys/snippet:", list(ajson.keys()) if isinstance(ajson, dict) else type(ajson), flush=True)
-            open(".state/instance_activities.json", "w", encoding="utf-8").write(json.dumps(ajson, indent=2))
-        except Exception:
-            print("activities text snippet:", inst_activities.text[:2000], flush=True)
-            open(".state/instance_activities.txt", "w", encoding="utf-8").write(inst_activities.text)
-    except Exception as e:
-        print("Failed to GET instance /activities:", e, flush=True)
-
+        open(".state/instance_activities.txt", "w", encoding="utf-8").write(inst_activities.text or "")
+    except Exception:
+        pass
     try:
         inst_outputs = requests.get(f"{loc}/outputs", headers=hdr, timeout=30)
-        print("/outputs status:", inst_outputs.status_code, flush=True)
-        try:
-            ojson = inst_outputs.json()
-            print("outputs keys/snippet:", list(ojson.keys()) if isinstance(ojson, dict) else type(ojson), flush=True)
-            open(".state/instance_outputs.json", "w", encoding="utf-8").write(json.dumps(ojson, indent=2))
-        except Exception:
-            print("outputs text snippet:", inst_outputs.text[:2000], flush=True)
-            open(".state/instance_outputs.txt", "w", encoding="utf-8").write(inst_outputs.text)
-    except Exception as e:
-        print("Failed to GET instance /outputs:", e, flush=True)
+        open(".state/instance_outputs.txt", "w", encoding="utf-8").write(inst_outputs.text or "")
+    except Exception:
+        pass
 
-    # also try item-scoped activities path as an alternative shape
-    try:
-        instance_id = loc.rstrip("/").split("/")[-1]
-        alt_url = f"{API_BASE}/workspaces/{ws_id}/items/{artifact_id}/jobs/instances/{instance_id}/activities"
-        alt = requests.get(alt_url, headers=hdr, timeout=30)
-        print("item-scoped activities status:", alt.status_code, flush=True)
-        try:
-            alt_json = alt.json()
-            print("item-scoped activities keys/snippet:", list(alt_json.keys()) if isinstance(alt_json, dict) else type(alt_json), flush=True)
-            open(".state/alt_instance_activities.json", "w", encoding="utf-8").write(json.dumps(alt_json, indent=2))
-        except Exception:
-            print("alt activities text snippet:", alt.text[:2000], flush=True)
-            open(".state/alt_instance_activities.txt", "w", encoding="utf-8").write(alt.text)
-    except Exception as e:
-        print("Failed to GET item-scoped activities:", e, flush=True)
-
-print("Wrote .state/notebook_run_result.json and any instance activity/output artifacts (if available).", flush=True)
-
-# also write datasets.json for upload step
+# also write datasets.json so upload-artifact step has something
 datasets = []
 if isinstance(params, dict) and "DATASETS_PARAM" in params:
     datasets = [d.get("name") for d in params["DATASETS_PARAM"] if isinstance(d, dict) and d.get("name")]
@@ -195,6 +209,7 @@ else:
         datasets = [d.get("name") for d in maybe if isinstance(d, dict) and d.get("name")]
 open(".state/datasets.json", "w", encoding="utf-8").write(json.dumps({"datasets": datasets}, indent=2))
 
+# exit non-zero only when the API call failed (non-2xx) or instance explicitly failed
 if instance_json and isinstance(instance_json, dict) and instance_json.get("status") and instance_json.get("status").lower() == "failed":
     sys.exit(12)
 if 200 <= resp.status_code < 300 or resp.status_code == 202:
