@@ -108,3 +108,4 @@ jobs:
           name: run-benchmarks-state
           path: .state/**
           if-no-files-found: warn
+          include-hidden-files: true
