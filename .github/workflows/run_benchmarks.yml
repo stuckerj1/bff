@@ -62,7 +62,7 @@ jobs:
                   "displayName": "4.VisualizeMetrics",
                   "description": "Display metrics",
                   "file": "notebooks/visualize_metrics.ipynb",
-                  "workspaces": ["BFF Controller"]
+                  "workspaces": ["BFF-Controller"]
               }
           ]
 
