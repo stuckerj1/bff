@@ -94,21 +94,27 @@ ALTER ROLE db_ddladmin ADD MEMBER [FabricBenchmarkingProvisioner];
 
 - [ ] Run GitHub Actions workflow: `Provision Notebooks`
 
-- [ ] In Fabric, establish Data Connections:
-  - [ ] 1.GenerateData - DataSourceLakehouse  
-  - [ ] 2.IngestData - DataSourceLakehouse & BenchmarkLakehouse
-  - [ ] 3.ApplyUpdates - DataSourceLakehouse & BenchmarkLakehouse
-  - [ ] 4.RunQueries - BenchmarkLakehouse
-  - [ ] 5.VisualizeMetrics - BenchmarkLakehouse
+- In Fabric, you may need to establish Data Connections:
+  - 0.GenerateData - DataSourceLakehouse  
+  - 1.IngestData - BenchmarkLakehouse
+  - 2.ApplyUpdates - BenchmarkLakehouse
+  - 3.RunQueries - BenchmarkLakehouse
+  - 4.VisualizeMetrics - BenchmarkLakehouse
 
  (Currently a manual process; will refactor to automate this sequence.)
  
-- [ ] Run Notebooks in order:  
-  - [ ] 1.GenerateData - Synthetic data generation  
-  - [ ] 2.IngestData - Initial data load 
-  - [ ] 3.ApplyUpdates - Full refresh, full compare, increment, (CDC deferred)
-  - [ ] 4.RunQueries - Capture query benchmarking  timings
-  - [ ] 5.VisualizeMetrics - Display metrics from capture
+- [ ] Run Notebooks in order:
+
+  `BFF Controller` workspace
+  - [ ] 0.GenerateData - Synthetic data generation
+
+  Action workspaces    
+  - [ ] 1.IngestData - Initial data load 
+  - [ ] 2.ApplyUpdates - Full refresh, full compare, increment, (CDC deferred)
+  - [ ] 3.RunQueries - Capture query benchmarking  timings
+  
+  `BFF Controller` workspace
+  - [ ] 4.VisualizeMetrics - Display metrics from capture
 
 - [ ] Review metrics and gain insights.
 
