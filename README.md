@@ -80,10 +80,10 @@ ALTER ROLE db_ddladmin ADD MEMBER [FabricBenchmarkingProvisioner];
   - Datasets specifying number of rows and ratio of updates (new/change/delete rows).     
   - Parameter sets for each test scenario:  size, from, to, update strategy
 
-- [ ] Run GitHub Actions workflow: `1. Provision BFF Controller and Action Workspaces`
+- [ ] Run GitHub Actions workflow: `1. Provision BFF-Controller and Action Workspaces`
 
 - [ ] Confirm Workspaces created successfully:  
-  - Workspace ID logged for BFF Controller and a workspace for each ingestion scenario 
+  - Workspace ID logged for BFF-Controller and a workspace for each ingestion scenario 
   - Admin role assigned with status code `201`  
   - Retry loop logs error metadata if assignment fails
 
@@ -108,7 +108,7 @@ ALTER ROLE db_ddladmin ADD MEMBER [FabricBenchmarkingProvisioner];
  
 - [ ] Run Notebooks in order:
 
-  `BFF Controller` workspace
+  `BFF-Controller` workspace
   - [ ] 0.GenerateData - Synthetic data generation
 
   In each action workspace
@@ -116,7 +116,7 @@ ALTER ROLE db_ddladmin ADD MEMBER [FabricBenchmarkingProvisioner];
   - [ ] 2.ApplyUpdates - Full refresh, full compare, increment, (CDC deferred)
   - [ ] 3.RunQueries - Capture query benchmarking  timings
   
-  `BFF Controller` workspace
+  `BFF-Controller` workspace
   - [ ] 4.VisualizeMetrics - Display metrics from capture
 
 - [ ] Review metrics and gain insights.
@@ -157,7 +157,7 @@ Troubleshooting Steps If Needed:
 ### External Data Ingestion
 
 To simulate ingesting data from an external system into Microsoft Fabric, the framework currently uses two source data options:
-1. A **separate Fabric lakehouse** in the BFF Controller workspace, which is distinct from the destination data / test case workspaces.
+1. A **separate Fabric lakehouse** in the BFF-Controller workspace, which is distinct from the destination data / test case workspaces.
 2. An **Azure SQL Database** (not in Fabric).
 
 Synthetic datasets are generated and stored in the DataSourceLakehouse as files (Parquet) and the exact same data is copied into the Azure SQL Database. Multiple datasets can be created with different sizes.  This enables realistic benchmarking and makes it easy to automate and parameterize ingestion workflows.
@@ -206,7 +206,7 @@ The ingestion module is structured for easy swapping of external sources. To add
 
 ---
 
-## 🧩 Modular Components (0 and 4 run in BFF Controller; 1-2-3 run in action workspaces)
+## 🧩 Modular Components (0 and 4 run in BFF-Controller; 1-2-3 run in action workspaces)
 
 ### 0. Synthetic Data Generation
 - **Purpose:** Create parameterized synthetic datasets (base and incremental slices) in DataSourceLakehouse.
