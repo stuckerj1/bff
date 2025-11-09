@@ -15,7 +15,7 @@ client = os.environ["CLIENT_ID"]
 secret = os.environ["CLIENT_SECRET"]
 
 # STANDARD NAMING FOR WORKSPACE AND NOTEBOOK
-ws_name = "BFF Controller"
+ws_name = "BFF-Controller"
 nb_display = "0.GenerateData"
 
 # obtain token and headers
