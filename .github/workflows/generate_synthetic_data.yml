@@ -33,7 +33,7 @@ jobs:
       - name: Prepare notebooks_to_create payload
         run: |
           mkdir -p .state
-          echo '[{"displayName":"0.GenerateData","description":"Synthetic data generation","file":"notebooks/generate_data.ipynb","workspaces":["BFF Controller"]}]' > .state/notebooks_to_create.json
+          echo '[{"displayName":"0.GenerateData","description":"Synthetic data generation","file":"notebooks/generate_data.ipynb","workspaces":["BFF-Controller"]}]' > .state/notebooks_to_create.json
 
       - name: Provision notebook(s)
         env:
