@@ -1,4 +1,4 @@
-name: "3. Generate Synthetic Data"
+name: "DEPRECATED Generate Synthetic Data"
 
 on:
   workflow_dispatch:
