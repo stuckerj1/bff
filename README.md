@@ -80,6 +80,9 @@ ALTER ROLE db_ddladmin ADD MEMBER [FabricBenchmarkingProvisioner];
   - Datasets specifying number of rows and ratio of updates (new/change/delete rows).     
   - Parameter sets for each test scenario:  size, from, to, update strategy
 
+- [ ] Confirm you have `Microsoft Fabric Capacity Metrics` workspace activated.
+    - https://learn.microsoft.com/en-us/fabric/fundamentals/enable-workspace-monitoring
+
 - [ ] Run GitHub Actions workflow: `1. Provision BFF-Controller and Action Workspaces`
 
 - [ ] Confirm Workspaces created successfully:  
@@ -87,7 +90,7 @@ ALTER ROLE db_ddladmin ADD MEMBER [FabricBenchmarkingProvisioner];
   - Admin role assigned with status code `201`  
   - Retry loop logs error metadata if assignment fails
 
-- [ ] Run GitHub Actions workflow: `Provision Fabric Lakehouses and Warehouse`
+- [ ] Run GitHub Actions workflow: `2. Provision Lakehouses & Warehouses`
 
 - [ ] Confirm Lakehouses and Warehouse are created successfully:  
   - Names: `BenchmarkLakehouse` and `DataSourceLakehouse` and `BenchmarkWarehouse`
@@ -95,18 +98,11 @@ ALTER ROLE db_ddladmin ADD MEMBER [FabricBenchmarkingProvisioner];
   - Created using `POST /v1/workspaces/{workspaceId}/lakehouses`  (similar for warehouse)
   - Confirm status code `201` and capture `lakehouse_ids` and `warehouse_id`
 
-- [ ] Run GitHub Actions workflow: `Provision Notebooks`
+- [ ] Run GitHub Actions workflow: `3. Provision Notebooks`
 
-- In Fabric, you may need to establish Data Connections:
-  - 0.GenerateData - DataSourceLakehouse  
-  - 1.IngestData - BenchmarkLakehouse
-  - 2.ApplyUpdates - BenchmarkLakehouse
-  - 3.RunQueries - BenchmarkLakehouse
-  - 4.VisualizeMetrics - BenchmarkLakehouse
+- [ ] Run GitHub Actions workflow: `4. Run Benchmarks`
 
- (Currently a manual process; will refactor to automate this sequence.)
- 
-- [ ] Run Notebooks in order:
+ - [ ] If automation is failing, run Notebooks in order:
 
   `BFF-Controller` workspace
   - [ ] 0.GenerateData - Synthetic data generation
@@ -115,7 +111,10 @@ ALTER ROLE db_ddladmin ADD MEMBER [FabricBenchmarkingProvisioner];
   - [ ] 1.IngestData - Initial data load 
   - [ ] 2.ApplyUpdates - Full refresh, full compare, increment, (CDC deferred)
   - [ ] 3.RunQueries - Capture query benchmarking  timings
-  
+
+- [ ] Run GitHub Actions workflow: `5. Visualize Metrics`
+    - Note:  you may need to wait a day to see all the storage and capacity usage metrics, after `Microsoft Fabric Capacity Metrics` workspace refreshes its data
+ 
   `BFF-Controller` workspace
   - [ ] 4.VisualizeMetrics - Display metrics from capture
 
