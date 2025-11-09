@@ -1,0 +1,111 @@
+name: 3. Provision Notebooks
+
+on:
+  workflow_dispatch:
+
+jobs:
+  provision-and-prepare:
+    runs-on: ubuntu-latest
+    env:
+      # Optional: keep sensible defaults here, override per-run if desired
+      MAX_GETDEF_WAIT_SECONDS: '180'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install runtime deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml requests
+
+      - name: Prepare notebooks_to_create payload
+        run: |
+          mkdir -p .state
+          python - <<'PY'
+          # Read the workspace display names from config/test_parameter_sets.yml
+          # We expect parameter_sets to be a list of dicts with a "name" field.
+          import yaml, json, sys, os
+
+          cfg_path = "config/test_parameter_sets.yml"
+          cfg = yaml.safe_load(open(cfg_path, "r", encoding="utf-8")) or {}
+          
+          workspaces = [p['name'] for p in cfg.get('parameter_sets', [])]
+
+          # Print for debugging
+          print("Discovered workspaces:", workspaces, file=sys.stderr)
+
+          notebooks = [
+              {
+                  "displayName": "1.IngestData",
+                  "description": "Synthetic data generation - ingest",
+                  "file": "notebooks/ingest_data.ipynb",
+                  "workspaces": workspaces
+              },
+              {
+                  "displayName": "2.ApplyUpdates",
+                  "description": "Synthetic data generation - apply updates",
+                  "file": "notebooks/apply_updates.ipynb",
+                  "workspaces": workspaces
+              },
+              {
+                  "displayName": "3.RunQueries",
+                  "description": "Synthetic data generation - run queries",
+                  "file": "notebooks/run_queries.ipynb",
+                  "workspaces": workspaces
+              },
+              {
+                  "displayName": "4.VisualizeMetrics",
+                  "description": "Display metrics",
+                  "file": "notebooks/visualize_metrics.ipynb",
+                  "workspaces": ["BFF-Controller"]
+              }
+          ]
+
+          out_path = ".state/notebooks_to_create.json"
+          with open(out_path, "w", encoding="utf-8") as fo:
+              fo.write(json.dumps(notebooks, indent=2, ensure_ascii=False))
+          print("Wrote", out_path, file=sys.stderr)
+          PY
+
+      - name: Show payload preview
+        run: |
+          echo "=== .state/notebooks_to_create.json ==="
+          sed -n '1,200p' .state/notebooks_to_create.json || true
+
+      - name: Provision notebook(s)
+        env:
+          TENANT_ID: ${{ secrets.TENANT_ID }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+        run: |
+          python ./scripts/provision_notebooks.py --notebooks-file .state/notebooks_to_create.json
+
+      # Placeholder: run notebooks in each workspace (deferred until programmatic run support is available)
+      - name: Run notebooks (TODO)
+        run: |
+          echo "TODO: Run all provisioned notebooks via API once Microsoft support confirms programmatic run behavior."
+          echo "This step is intentionally a placeholder and will be implemented after support guidance."
+
+      - name: Debug .state contents
+        run: |
+          echo "=== contents of .state ==="
+          ls -la .state || true
+          for f in .state/*; do
+            [ -e "$f" ] || continue
+            echo "---- $f ----"
+            sed -n '1,200p' "$f" || true
+          done
+          
+      # Upload .state for debugging and to capture created artifacts (notebooks, logs, etc.)
+      - name: Upload .state artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-benchmarks-state
+          path: .state/**
+          if-no-files-found: warn
+          include-hidden-files: true
