@@ -65,23 +65,6 @@ Parameter validation (apply in matrix-builder / CI)
   - No duplicate `parameter_set.name` values
 - The matrix-builder script (tools/build_matrix_from_params.py) should produce `sanitized_name` and the JSON `matrix.include` for GitHub Actions.
 
-Example params dict passed from orchestrator to notebooks
-```
-{
-  "workspace_name": "BFF 10k LH to WH Full Refresh",
-  "sanitized_name": "bff-10k-lh-to-wh-full-refresh",
-  "dataset_name": "10k",
-  "row_count": "10000",
-  "source": "lakehouse",
-  "format": "warehouse",
-  "update_strategy": "Full Refresh",
-  "change_fraction": 0.01,
-  "new_fraction": 0.005,
-  "delete_fraction": 0.001,
-  "seed": 42
-}
-```
-
 Example code to retrieve parameters for workflow
 ```python
 cfg = yaml.safe_load(open('/config/parameter_sets.yaml', 'r', encoding='utf-8'))
@@ -92,7 +75,7 @@ change_fraction = float(params.get('change_fraction', dataset_cfg.get('change_fr
 # ... read other params similarly
 ```
 
-Example first cell of notebook to capture parameters from the workflow
+Example first cell of controller notebook to capture parameters for synthetic data generation
 ```python
 %%configure -f
 {
@@ -101,6 +84,19 @@ Example first cell of notebook to capture parameters from the workflow
   },
   "defaultLakehouse": {
     "name": "DataSourceLakehouse"
+  }
+}
+```
+
+Example first cell of action notebook to capture parameters for ingestion
+```python
+%%configure -f
+{
+  "conf": {
+    "spark.notebook.parameters": "{\"name\": \"BFF-10k-SQL-to-WH-Full-Compare\", \"dataset_name\": \"10k\", \"source\": \"sql\", \"format\": \"warehouse\", \"update_strategy\": \"Full Compare\", \"AZURE_SQL_SERVER\": \"benchmarking-bff\", \"AZURE_SQL_DB\": \"benchmarking\", \"AZURE_SQL_SCHEMA\": \"dbo\"}"
+  },
+  "defaultLakehouse": {
+    "name": "BenchmarkLakehouse"
   }
 }
 ```
