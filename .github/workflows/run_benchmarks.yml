@@ -27,20 +27,16 @@ jobs:
         run: |
           mkdir -p .state
           python - <<'PY'
-          # Read workspace list directly from the known config shape.
-          # This keeps the code minimal and prints the discovered list for debugging.
-          import yaml, json, sys
+          # Read the workspace display names from config/test_parameter_sets.yml
+          # We expect parameter_sets to be a list of dicts with a "name" field.
+          import yaml, json, sys, os
+
           cfg_path = "config/test_parameter_sets.yml"
-          try:
-              cfg = yaml.safe_load(open(cfg_path, "r", encoding="utf-8")) or {}
-          except Exception as e:
-              print("Failed to load", cfg_path, ":", e, file=sys.stderr)
-              cfg = {}
+          cfg = yaml.safe_load(open(cfg_path, "r", encoding="utf-8")) or {}
+          
+          workspaces = [p['name'] for p in cfg.get('parameter_sets', [])]
 
-          workspaces = cfg.get("workspaces", [])
-          if isinstance(workspaces, str):
-              workspaces = [workspaces]
-
+          # Print for debugging
           print("Discovered workspaces:", workspaces, file=sys.stderr)
 
           notebooks = [
@@ -94,6 +90,16 @@ jobs:
         run: |
           echo "TODO: Run all provisioned notebooks via API once Microsoft support confirms programmatic run behavior."
           echo "This step is intentionally a placeholder and will be implemented after support guidance."
+
+      # Debug: show .state contents before uploading artifacts
+      - name: Debug .state contents
+        run: |
+          echo "=== contents of .state ==="
+          ls -la .state || true
+          for f in .state/* || true; do
+            echo "---- $f ----"
+            sed -n '1,200p' "$f" || true
+          done
 
       # Upload .state for debugging and to capture created artifacts (notebooks, logs, etc.)
       - name: Upload .state artifacts
