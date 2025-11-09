@@ -1,7 +1,7 @@
 import yaml, json, sys
 cfg = yaml.safe_load(open("config/test_parameter_sets.yml","r",encoding="utf-8")) or {}
 per_workspace = [p['name'] for p in cfg.get('parameter_sets', [])]
-controller = ["BFF Controller"]
+controller = ["BFF-Controller"]
 notebooks = [
   {"displayName":"0.GenerateData","description":"Global generate","file":"notebooks/generate_data.ipynb","workspaces":controller},
   {"displayName":"1.IngestData","description":"Test ingest","file":"notebooks/ingest_data.ipynb","workspaces":per_workspace},
