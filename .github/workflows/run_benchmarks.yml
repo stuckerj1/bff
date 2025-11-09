@@ -91,16 +91,16 @@ jobs:
           echo "TODO: Run all provisioned notebooks via API once Microsoft support confirms programmatic run behavior."
           echo "This step is intentionally a placeholder and will be implemented after support guidance."
 
-      # Debug: show .state contents before uploading artifacts
       - name: Debug .state contents
         run: |
           echo "=== contents of .state ==="
           ls -la .state || true
-          for f in .state/* || true; do
+          for f in .state/*; do
+            [ -e "$f" ] || continue
             echo "---- $f ----"
             sed -n '1,200p' "$f" || true
           done
-
+          
       # Upload .state for debugging and to capture created artifacts (notebooks, logs, etc.)
       - name: Upload .state artifacts
         uses: actions/upload-artifact@v4
