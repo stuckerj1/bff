@@ -82,22 +82,27 @@ Example params dict passed from orchestrator to notebooks
 }
 ```
 
-Notebook header snippet (recommended cell to add to start of action notebooks)
+Example code to retrieve parameters for workflow
 ```python
-# Param handling (synapse_pyspark)
-import yaml, os
-try:
-    # When run via mssparkutils.notebook.run, params can be passed as a dict
-    params = mssparkutils.notebook.getContext().getInput('params') or {}
-except Exception:
-    params = {}
-
-cfg = yaml.safe_load(open('/workspace/config/parameter_sets.yaml', 'r', encoding='utf-8'))
+cfg = yaml.safe_load(open('/config/parameter_sets.yaml', 'r', encoding='utf-8'))
 datasets = {d['name']: d for d in cfg.get('datasets', [])}
 dataset_cfg = datasets.get(params.get('dataset_name'), {})
 row_count = int(params.get('row_count', dataset_cfg.get('row_count', 10000)))
 change_fraction = float(params.get('change_fraction', dataset_cfg.get('change_fraction', 0.01)))
 # ... read other params similarly
+```
+
+Example first cell of notebook to capture parameters from the workflow
+```python
+%%configure -f
+{
+  "conf": {
+    "spark.notebook.parameters": "{\"DATASETS_PARAM\": [{\"name\": \"1k\", \"row_count\": 1000, \"change_fraction\": 0.01, \"new_fraction\": 0.005, \"delete_fraction\": 0.001, \"seed\": 42, \"description\": \"Interactive small dataset (1k rows)\"}, {\"name\": \"100k\", \"row_count\": 100000, \"change_fraction\": 0.01, \"new_fraction\": 0.005, \"delete_fraction\": 0.001, \"seed\": 42, \"description\": \"Interactive medium dataset (100k rows)\"}], \"PUSH_TO_AZURE_SQL\": true, \"AZURE_SQL_SERVER\": \"benchmarking-bff\", \"AZURE_SQL_DB\": \"benchmarking\", \"AZURE_SQL_SCHEMA\": \"dbo\", \"distribution\": \"uniform\", \"seed\": 42}"
+  },
+  "defaultLakehouse": {
+    "name": "DataSourceLakehouse"
+  }
+}
 ```
 
 Rollout recommendation
