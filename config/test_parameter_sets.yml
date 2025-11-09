@@ -24,7 +24,7 @@ datasets:
     description: "Scale test dataset (1M rows)"
 
 parameter_sets:
-  - name: "BFF 10k LH to Delta Full Refresh"
+  - name: "BFF-10k-LH-to-Delta-Full-Refresh"
     dataset_name: "10k"
     source: "lakehouse"            # lakehouse | sql
     format: "delta"                # delta | warehouse
@@ -35,7 +35,7 @@ parameter_sets:
       - apply_updates
       - run_queries
 
-  - name: "BFF 10k SQL to WH Full Compare"
+  - name: "BFF-10k-SQL-to-WH-Full-Compare"
     dataset_name: "10k"
     source: "sql"
     format: "warehouse"
@@ -46,7 +46,7 @@ parameter_sets:
       - apply_updates
       - run_queries
 
-  - name: "BFF 1M LH to WH Increment"
+  - name: "BFF-1M-LH-to-WH-Increment"
     dataset_name: "1m"
     source: "lakehouse"
     format: "warehouse"
