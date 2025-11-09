@@ -1,14 +1,14 @@
-# Provision BFF Controller and Action Workspaces (test parameter sets)
+# Provision BFF-Controller and Action Workspaces (test parameter sets)
 # - Reads config/test_parameter_sets.yml
 # - Builds/validates a matrix and uploads matrix.json artifact
-# - Calls scripts/provision_workspace.py to create the BFF Controller workspace (writes .state/controller.json)
+# - Calls scripts/provision_workspace.py to create the BFF-Controller workspace (writes .state/controller.json)
 # - Calls scripts/provision_workspace.py for each action workspace (writes .state/workspace-<sanitized>.json)
 # - Uploads per-workspace artifacts and assembles a summary (.state/bff-workspaces-summary.json)
 #
 # Notes:
 # - Ensures requests is installed before running the script.
 # - Uses one-line python -c invocations for small extractions to avoid heredoc/indentation pitfalls that can break YAML parsing.
-name: 1. Provision BFF Controller and Action Workspaces (test parameter sets)
+name: 1. Provision BFF-Controller and Action Workspaces (test parameter sets)
 
 on:
   workflow_dispatch:
@@ -127,7 +127,7 @@ jobs:
           path: .state/bff-matrix.json
 
   provision-controller:
-    name: Provision BFF Controller workspace (single)
+    name: Provision BFF-Controller workspace (single)
     runs-on: ubuntu-latest
     needs: gen-matrix
     outputs:
@@ -147,7 +147,7 @@ jobs:
       - name: Provision Controller workspace via script
         id: provision-controller
         env:
-          CONTROLLER_NAME: "BFF Controller"
+          CONTROLLER_NAME: "BFF-Controller"
           # pass the existing FabricBenchmarkingProvisioner secrets into the script
           TENANT_ID: ${{ secrets.TENANT_ID }}
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
