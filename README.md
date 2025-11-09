@@ -100,9 +100,10 @@ ALTER ROLE db_ddladmin ADD MEMBER [FabricBenchmarkingProvisioner];
 
 - [ ] Run GitHub Actions workflow: `3. Provision Notebooks`
 
-- [ ] Run GitHub Actions workflow: `4. Run Benchmarks`
+- Note:  a call to Run GitHub Actions workflow: `4. Run Benchmarks` will fail, so ignore that for now until automation is working
 
-  - This calls a `4. Run Benchmarks` notebook which runs the other notebooks in order:
+- [ ] In the `BFF-Controller` workspace manually run `4. Run Benchmarks` notebook.
+  - 4. Run Benchmarks runs the other notebooks in order:
 
       `BFF-Controller` workspace
       - 0.GenerateData - Synthetic data generation
@@ -112,8 +113,8 @@ ALTER ROLE db_ddladmin ADD MEMBER [FabricBenchmarkingProvisioner];
       - 2.ApplyUpdates - Full refresh, full compare, increment, (CDC deferred)
       - 3.Queries - Capture query benchmarking  timings
 
-- [ ] Manually run `5. Visualize Metrics` notebook in the `BFF-Controller` workspace
-  - [ ] 5.VisualizeMetrics - Display metrics from capture
+- [ ] In the `BFF-Controller` workspace manually run manually run `5. Visualize Metrics` notebook.
+  - 5.VisualizeMetrics - Display metrics from capture
     - Note:  you may need to wait a day to see all the storage and capacity usage metrics, after `Microsoft Fabric Capacity Metrics` workspace refreshes its data
 
 - [ ] Review metrics and gain insights.
