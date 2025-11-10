@@ -30,10 +30,6 @@ parameter_sets:
     format: "delta"                # delta | warehouse
     update_strategy: "Full Refresh"
     notes: "Baseline 10k full refresh lakehouse -> delta"
-    run_order:
-      - ingest_data
-      - apply_updates
-      - run_queries
 
   - name: "BFF-10k-SQL-to-WH-Full-Compare"
     dataset_name: "10k"
@@ -41,10 +37,6 @@ parameter_sets:
     format: "warehouse"
     update_strategy: "Full Compare"
     notes: "10k Full Compare (Warehouse)"
-    run_order:
-      - ingest_data
-      - apply_updates
-      - run_queries
 
   - name: "BFF-1M-LH-to-WH-Increment"
     dataset_name: "1m"
@@ -52,9 +44,5 @@ parameter_sets:
     format: "warehouse"
     update_strategy: "Increment"
     notes: "Scale test 1M rows"
-    run_order:
-      - ingest_data
-      - apply_updates
-      - run_queries
 
 # Add more parameter_sets referencing dataset_name: e.g. a SQL-source variant, different update strategies, etc.
