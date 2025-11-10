@@ -5,7 +5,7 @@ on:
 
 jobs:
   provision-notebooks:
-    name: Prepare notebooks-to-create and upload artifact
+    name: Provision notebooks and upload artifact
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -44,4 +44,5 @@ jobs:
         with:
           name: notebooks-provisioned
           path: .state/notebooks_provisioned.json
+          include-hidden-files: true          
           if-no-files-found: error
