@@ -24,6 +24,8 @@ jobs:
           TENANT_ID: ${{ secrets.TENANT_ID }}
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          AZURE_SQL_SERVER: ${{ secrets.AZURE_SQL_SERVER }}
+          AZURE_SQL_DB: ${{ secrets.AZURE_SQL_DB }}
         run: python ./scripts/provision_notebooks.py
 
       - name: Show .state contents (debug)
