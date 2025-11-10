@@ -4,9 +4,14 @@ Provision and upload notebooks to Fabric workspaces.
 
 Behavior (minimal):
 - Read config/test_parameter_sets.yml from the repo and synthesize notebooks-to-create manifest.
+- Populate the notebooks' %%configure parameter cells dynamically from the parameter file:
+  - generate_data.ipynb -> DATASETS_PARAM populated from datasets list
+  - ingest_data/apply_updates/queries -> single-parameter-set shape for each workspace
+  - run_benchmarks/visualize_metrics -> runs list containing all parameter_sets
 - Authenticate using client credentials (TENANT_ID, CLIENT_ID, CLIENT_SECRET).
 - For each notebook->workspace:
   - find workspace id by displayName (via GET /workspaces)
+  - replace the notebook parameter cell as above (best-effort)
   - base64-encode the .ipynb and POST to /workspaces/{workspace_id}/items
   - if the create returns 202, poll /workspaces/{workspace_id}/items until the notebook appears (best-effort)
 - Write .state/notebooks_created.json with one entry per notebook->workspace mapping.
@@ -23,7 +28,9 @@ from pathlib import Path
 import requests
 import yaml
 
-# constants
+# constants / easy-to-change parameter file name
+PARAMS_SOURCE = "config/test_parameter_sets.yml"  # change to parameter_sets.yml later if desired
+
 STATE_DIR = Path(".state")
 STATE_DIR.mkdir(exist_ok=True)
 OUT_FILE = STATE_DIR / "notebooks_created.json"
@@ -36,9 +43,14 @@ POLL_SLEEP = 5
 POLL_ATTEMPTS = 20
 
 # Synthesize notebooks manifest from config/test_parameter_sets.yml (always)
-cfg_path = Path("config/test_parameter_sets.yml")
+cfg_path = Path(PARAMS_SOURCE)
 cfg = {}
-cfg = yaml.safe_load(open(cfg_path, "r", encoding="utf-8")) 
+try:
+    cfg = yaml.safe_load(open(cfg_path, "r", encoding="utf-8")) or {}
+except Exception as e:
+    print(f"Failed to load parameter file {cfg_path}: {e}", file=sys.stderr)
+    sys.exit(2)
+
 per_workspace = [p["name"] for p in cfg.get("parameter_sets", [])]
 controller = ["BFF-Controller"]
 
@@ -115,6 +127,82 @@ def _poll_for_item(workspace_id: str, target_display: str) -> str | None:
         time.sleep(POLL_SLEEP)
     return None
 
+# --- New: helpers to build parameter cells for notebooks before upload ---
+
+def _find_and_replace_parameters_cell(ipynb: dict, new_cell_source: str) -> bool:
+    """
+    Find the code cell with spark.notebook.parameters (or tagged 'parameters') and replace its source.
+    Returns True if replaced, False if not found.
+    """
+    cells = ipynb.get("cells", [])
+    for c in cells:
+        # check tags first
+        meta = c.get("metadata", {}) or {}
+        tags = meta.get("tags", []) or []
+        src_text = "".join(c.get("source", [])) if c.get("source") else ""
+        if "parameters" in tags or "spark.notebook.parameters" in src_text:
+            c["cell_type"] = "code"
+            c["metadata"] = c.get("metadata", {})
+            # ensure it's a list of lines, start with %%configure -f
+            c["source"] = [new_cell_source]
+            return True
+    # fallback: replace first code cell if nothing else found (safer than nothing)
+    for c in cells:
+        if c.get("cell_type") == "code":
+            src_text = "".join(c.get("source", [])) if c.get("source") else ""
+            if "%%configure" in src_text or "spark.notebook.parameters" in src_text:
+                c["source"] = [new_cell_source]
+                return True
+    return False
+
+def _make_generate_data_cell(datasets_list: list) -> str:
+    inner = {
+        "DATASETS_PARAM": datasets_list,
+        # keep these defaults as in your example; adjust later if needed
+        "PUSH_TO_AZURE_SQL": True,
+        "AZURE_SQL_SERVER": "benchmarking-bff",
+        "AZURE_SQL_DB": "benchmarking",
+        "AZURE_SQL_SCHEMA": "dbo",
+        "distribution": "uniform",
+        "seed": 42
+    }
+    outer = {
+        "conf": {
+            "spark.notebook.parameters": json.dumps(inner, ensure_ascii=False)
+        },
+        "defaultLakehouse": {"name": "DataSourceLakehouse"}
+    }
+    # produce the cell content as a single string; notebook will accept it
+    return "%%configure -f\n" + json.dumps(outer, indent=2, ensure_ascii=False) + "\n"
+
+def _make_single_run_cell(param_obj: dict) -> str:
+    # param_obj is the parameter_set-like dict for this workspace run
+    outer = {
+        "conf": {
+            "spark.notebook.parameters": json.dumps(param_obj, ensure_ascii=False)
+        },
+        "defaultLakehouse": {"name": "BenchmarkLakehouse"}
+    }
+    return "%%configure -f\n" + json.dumps(outer, indent=2, ensure_ascii=False) + "\n"
+
+def _make_runs_cell(all_param_sets: list) -> str:
+    # all_param_sets: list of parameter_set dicts; we only need name,dataset_name,source,format,update_strategy fields
+    runs = []
+    for p in all_param_sets:
+        runs.append({
+            "name": p.get("name"),
+            "dataset_name": p.get("dataset_name"),
+            "source": p.get("source"),
+            "format": p.get("format"),
+            "update_strategy": p.get("update_strategy")
+        })
+    outer = {
+        "conf": {
+            "spark.notebook.parameters": json.dumps({"runs": runs}, ensure_ascii=False)
+        }
+    }
+    return "%%configure -f\n" + json.dumps(outer, indent=2, ensure_ascii=False) + "\n"
+
 # process each notebook entry
 for nb in notebooks:
     display = nb.get("displayName") or nb.get("displayname") or nb.get("name") or "unnamed"
@@ -170,7 +258,40 @@ for nb in notebooks:
             continue
 
         try:
-            ipynb_b64 = base64.b64encode(ipynb_bytes).decode("utf-8")
+            # Happy path: assume the notebook bytes decode to UTF-8 and are valid JSON
+            ipynb_text = ipynb_bytes.decode("utf-8")
+            ipynb_json = json.loads(ipynb_text)
+
+            modified_payload_bytes = ipynb_bytes  # default to original bytes if we can't modify
+
+            fname = Path(file_path).name.lower() if file_path else ""
+
+            replaced = False
+            # generate appropriate new configure cell source
+            if "generate_data" in fname or "generate_data.ipynb" in fname:
+                datasets_list = cfg.get("datasets", [])
+                new_cell = _make_generate_data_cell(datasets_list)
+                replaced = _find_and_replace_parameters_cell(ipynb_json, new_cell)
+            elif any(x in fname for x in ("ingest_data", "apply_updates", "queries")):
+                # find the parameter set for this workspace (match by name)
+                param_set = next((p for p in cfg.get("parameter_sets", []) if p.get("name") == ws), None)
+                if not param_set:
+                    # fallback: construct minimal param set with name=workspace
+                    param_set = {"name": ws}
+                new_cell = _make_single_run_cell(param_set)
+                replaced = _find_and_replace_parameters_cell(ipynb_json, new_cell)
+            elif any(x in fname for x in ("run_benchmarks", "visualize_metrics")):
+                all_params = cfg.get("parameter_sets", [])
+                new_cell = _make_runs_cell(all_params)
+                replaced = _find_and_replace_parameters_cell(ipynb_json, new_cell)
+
+            if replaced:
+                # serialize back to bytes
+                modified_payload_bytes = json.dumps(ipynb_json, ensure_ascii=False).encode("utf-8")
+            # else: leave original bytes (no replacement found)
+
+            # base64 and upload (modified_payload_bytes or original ipynb_bytes)
+            ipynb_b64 = base64.b64encode(modified_payload_bytes).decode("utf-8")
             upload_url = f"{API_BASE}/workspaces/{ws_id}/items"
             payload = {
                 "displayName": display,
