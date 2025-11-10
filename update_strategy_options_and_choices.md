@@ -86,3 +86,6 @@ Captured narrative
 
 - Use "current" as canonical, materialize current in generate_data, do not include materialization in timed metrics, use SQL materialized views for SQL sources, use warehouse staging + server-side join for sql→wh, and keep spark flows ephemeral. Full-compare is timestamp-driven and incremental is a simple append.
 
+
+Additional refactoring checklist
+- Run/trace identifiers ... Should the notebook generate one run_id (UUID) at start and attach to metrics and event rows? 
