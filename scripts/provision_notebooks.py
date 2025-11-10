@@ -165,8 +165,21 @@ def _make_single_run_cell(param_obj: dict) -> str:
     in cfg (matched by workspace name). Also do not synthesize missing AZURE_SQL_* values here because they
     are required from the environment at script start.
     """
-    # copy the provided param_obj exactly
+    # copy the provided param_obj exactly, but ensure AZURE_SQL_* are present for SQL source if missing
     p = dict(param_obj or {})
+
+    # If the parameter set indicates source == 'sql' (or user omitted but we require), ensure env values exist in the cell
+    # Only add if not already present in the provided param set.
+    src = (p.get("source") or "").lower()
+    if src == "sql" or "AZURE_SQL_SERVER" not in p or "AZURE_SQL_DB" not in p:
+        # Inject environment values when not present; these env vars are required at script start.
+        if "AZURE_SQL_SERVER" not in p and az_server:
+            p["AZURE_SQL_SERVER"] = az_server
+        if "AZURE_SQL_DB" not in p and az_db:
+            p["AZURE_SQL_DB"] = az_db
+        if "AZURE_SQL_SCHEMA" not in p and az_schema:
+            p["AZURE_SQL_SCHEMA"] = az_schema
+
     outer = {
         "conf": {
             "spark.notebook.parameters": json.dumps(p, ensure_ascii=False)
