@@ -50,7 +50,7 @@ parameter_sets:
     dataset_name: "1m"
     source: "lakehouse"
     format: "warehouse"
-    update_strategy: "Full Refresh"
+    update_strategy: "Increment"
     notes: "Scale test 1M rows"
     run_order:
       - ingest_data
