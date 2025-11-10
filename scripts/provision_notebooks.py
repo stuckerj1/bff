@@ -176,15 +176,30 @@ def _make_single_run_cell(param_obj: dict) -> str:
     return "%%configure -f\n" + json.dumps(outer, indent=2, ensure_ascii=False) + "\n"
 
 def _make_runs_cell(all_param_sets: list) -> str:
+    """
+    Build the 'runs' cell for run_benchmarks/visualize_metrics.
+
+    For any parameter_set whose source == 'sql', ensure AZURE_SQL_SERVER and AZURE_SQL_DB
+    are present in the run entry (populated from environment which is required earlier).
+    This prevents notebook runs that expect SQL connection info from failing.
+    """
     runs = []
     for p in all_param_sets:
-        runs.append({
+        # Build a minimal run entry but propagate necessary SQL connection fields for source==sql
+        run_entry = {
             "name": p.get("name"),
             "dataset_name": p.get("dataset_name"),
             "source": p.get("source"),
             "format": p.get("format"),
             "update_strategy": p.get("update_strategy")
-        })
+        }
+        if (p.get("source") or "").lower() == "sql":
+            # ensure connection info present for SQL runs
+            run_entry["AZURE_SQL_SERVER"] = az_server
+            run_entry["AZURE_SQL_DB"] = az_db
+            if az_schema:
+                run_entry["AZURE_SQL_SCHEMA"] = az_schema
+        runs.append(run_entry)
     outer = {
         "conf": {
             "spark.notebook.parameters": json.dumps({"runs": runs}, ensure_ascii=False)
