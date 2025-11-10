@@ -1,41 +1,33 @@
 #!/usr/bin/env python3
 """
-Notebook provisioning helper with upload support.
+Provision and upload notebooks to Fabric workspaces.
 
-Behavior:
-- Read a JSON file (--notebooks-file) listing notebooks to create.
-  Each entry should have: displayName, description (opt), file, workspaces (list or string).
+Behavior (minimal):
+- Read config/test_parameter_sets.yml from the repo and synthesize notebooks-to-create manifest.
 - Authenticate using client credentials (TENANT_ID, CLIENT_ID, CLIENT_SECRET).
 - For each notebook->workspace:
   - find workspace id by displayName (via GET /workspaces)
   - base64-encode the .ipynb and POST to /workspaces/{workspace_id}/items
   - if the create returns 202, poll /workspaces/{workspace_id}/items until the notebook appears (best-effort)
-- Write .state/notebooks_created.json with one entry per notebook->workspace mapping including status, workspace_id, notebook_id, and server response info.
+- Write .state/notebooks_created.json with one entry per notebook->workspace mapping.
 
-Notes:
-- This script performs network/API calls and requires environment variables:
-    TENANT_ID, CLIENT_ID, CLIENT_SECRET
-- The script is intentionally straightforward and focuses only on upload behavior.
+This script is intentionally simple and deterministic.
 """
 from __future__ import annotations
-import argparse
 import base64
 import json
 import os
 import sys
 import time
 from pathlib import Path
-
-try:
-    import requests
-except Exception:
-    print("Missing dependency: requests. Install via pip install requests", file=sys.stderr)
-    sys.exit(1)
+import requests
+import yaml
 
 # constants
 STATE_DIR = Path(".state")
 STATE_DIR.mkdir(exist_ok=True)
 OUT_FILE = STATE_DIR / "notebooks_created.json"
+MANIFEST_FILE = STATE_DIR / "notebooks_to_create.json"
 
 OAUTH_TIMEOUT = 30
 API_BASE = "https://api.fabric.microsoft.com/v1"
@@ -43,22 +35,26 @@ UPLOAD_TIMEOUT = 60
 POLL_SLEEP = 5
 POLL_ATTEMPTS = 20
 
-# parse args
-p = argparse.ArgumentParser(description="Provision and upload notebooks to Fabric workspaces.")
-p.add_argument("--notebooks-file", required=True, help="JSON file with notebooks to create")
-args = p.parse_args()
+# Synthesize notebooks manifest from config/test_parameter_sets.yml (always)
+cfg_path = Path("config/test_parameter_sets.yml")
+cfg = {}
+cfg = yaml.safe_load(open(cfg_path, "r", encoding="utf-8")) 
+per_workspace = [p["name"] for p in cfg.get("parameter_sets", [])]
+controller = ["BFF-Controller"]
 
-nb_file = Path(args.notebooks_file)
-if not nb_file.exists():
-    print(f"Notebooks file not found: {nb_file}", file=sys.stderr)
-    sys.exit(2)
+notebooks = [
+  {"displayName":"0.GenerateData","description":"Global generate","file":"notebooks/generate_data.ipynb","workspaces": controller},
+  {"displayName":"1.IngestData","description":"Test ingest","file":"notebooks/ingest_data.ipynb","workspaces": per_workspace},
+  {"displayName":"2.ApplyUpdates","description":"Test updates","file":"notebooks/apply_updates.ipynb","workspaces": per_workspace},
+  {"displayName":"3.Queries","description":"Test queries","file":"notebooks/queries.ipynb","workspaces": per_workspace},
+  {"displayName":"4.RunBenchmarks","description":"Global run/visualize","file":"notebooks/run_benchmarks.ipynb","workspaces": controller},
+  {"displayName":"5.VisualizeMetrics","description":"Global visualize","file":"notebooks/visualize_metrics.ipynb","workspaces": controller}
+]
 
-# load notebooks list
-try:
-    notebooks = json.loads(nb_file.read_text(encoding="utf-8"))
-except Exception as e:
-    print(f"Failed to read/parse notebooks file {nb_file}: {e}", file=sys.stderr)
-    sys.exit(3)
+# persist the generated manifest for debugging / workflow artifact upload
+MANIFEST_FILE.write_text(json.dumps(notebooks, indent=2), encoding="utf-8")
+print(f"Wrote synthesized notebooks manifest -> {MANIFEST_FILE}")
+
 
 # read auth env
 tenant = os.environ.get("TENANT_ID")
@@ -103,7 +99,7 @@ except Exception as e:
 
 results = []
 
-# helper inline: poll for item presence
+# helper: poll for item presence
 def _poll_for_item(workspace_id: str, target_display: str) -> str | None:
     items_url = f"{API_BASE}/workspaces/{workspace_id}/items"
     for attempt in range(1, POLL_ATTEMPTS + 1):
@@ -145,8 +141,7 @@ for nb in notebooks:
         if src.exists():
             try:
                 ipynb_bytes = src.read_bytes()
-            except Exception as e:
-                # will record per-workspace failure below
+            except Exception:
                 ipynb_bytes = None
 
     for ws in workspaces:
@@ -174,7 +169,6 @@ for nb in notebooks:
             results.append(entry)
             continue
 
-        # build upload payload
         try:
             ipynb_b64 = base64.b64encode(ipynb_bytes).decode("utf-8")
             upload_url = f"{API_BASE}/workspaces/{ws_id}/items"
@@ -205,7 +199,6 @@ for nb in notebooks:
                 results.append(entry)
                 continue
             if upl.status_code == 202:
-                # best-effort poll for the item to appear in /items
                 nid = _poll_for_item(ws_id, display)
                 if nid:
                     entry["notebook_id"] = nid
@@ -214,7 +207,6 @@ for nb in notebooks:
                     entry["status"] = "accepted_no_completion"
                 results.append(entry)
                 continue
-            # other error
             entry["status"] = "upload_failed"
             results.append(entry)
         except Exception as e:
