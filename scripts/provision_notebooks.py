@@ -216,7 +216,8 @@ def _make_runs_cell(all_param_sets: list) -> str:
     outer = {
         "conf": {
             "spark.notebook.parameters": json.dumps({"runs": runs}, ensure_ascii=False)
-        }
+        },
+        "defaultLakehouse": {"name": "MetricsLakehouse"}
     }
     return "%%configure -f\n" + json.dumps(outer, indent=2, ensure_ascii=False) + "\n"
 
