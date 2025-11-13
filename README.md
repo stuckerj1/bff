@@ -122,8 +122,9 @@ ALTER ROLE db_ddladmin ADD MEMBER [FabricBenchmarkingProvisioner];
 Troubleshooting Steps If Needed:
 
 - [ ] Confirm DataSourceLakehouse folder structure and data:  
-  - `base/` → for initial datasets  
-  - `updates/` → for increment (CDC deferred)  
+  - `base/` → for initial source datasets  
+  - `current/` → source dataset after some updates have been applied 
+  - `updates/` → all the changes from base to current, used for increment loading (CDC deferred)  
   - Folder creation handled via 1.GenerateData notebook logic 
 
 - [ ] Semantic model connected to Delta tables
@@ -146,7 +147,7 @@ Troubleshooting Steps If Needed:
 | `row_count` | 10K, 1M | 
 | `format` | Delta, Warehouse | 
 | `source` | Lakehouse, SQL | 
-| `update_strategy` | Full Refresh, Full Compare, Increment (CDC deferred) | 
+| `update_strategy` | Full Refresh, Full Compare, Increment, (CDC deferred) | 
 
 ---
 
@@ -207,9 +208,9 @@ The ingestion module is structured for easy swapping of external sources. To add
 ## 🧩 Modular Components (0 and 4 run in BFF-Controller; 1-2-3 run in action workspaces)
 
 ### 0. Synthetic Data Generation
-- **Purpose:** Create parameterized synthetic datasets (base and incremental slices) in DataSourceLakehouse.
+- **Purpose:** Create parameterized synthetic datasets (base, current and incremental slices) in DataSourceLakehouse.
 - **Parameters:** `row_count` (e.g., 10K, 1M), schema, distribution, change %, insert %, delete %.
-- **Output:** Parquet/Delta base data, increment update slices (CDC deferred).
+- **Output:** Parquet/Delta base data, current data, increment update slices, (CDC deferred).
 
 ### 1. Ingestion & Lakehouse/Warehouse Provisioning
 - **Targets:** 
@@ -236,6 +237,9 @@ The ingestion module is structured for easy swapping of external sources. To add
 
 ## 📊 Sample Scorecard Layout
 
+Note: this table needs updated.  The TC.* naming convention is no longer used.  
+Instead, use the parameter_sets names, e.g., BFF-10k-LH-to-Delta-Full-Refresh
+
 | Test Case |  Action | Target | Rows | Update Strategy | Ingest Time | Storage Size | Query Type | Query Time | Notes | 
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | 
 | TC.01.x | Load   | delta_refresh_load<br>delta_compare_load<br>delta_increment_load | per x | - | 3.2s | 12 MB | - | - | Initial load; benchmark only one | 
@@ -258,5 +262,13 @@ The ingestion module is structured for easy swapping of external sources. To add
 ---
 
 ## 🙏 Acknowledgments
+
+- Created by Jeff Stucker
+    - jeff@stucker.net | (208) 724-8995
+    - https://linkedin.com/in/jeffstucker
+ 
+- With thanks to Mike Magalsky 
+    - https://infovia.com/ 
+    - https://info-secur.com/
 
 - Uses [dawidd6/action-download-artifact](https://github.com/dawidd6/action-download-artifact) for workflow artifact management.
