@@ -1,8 +1,10 @@
-# TESTING Parameter/config file for BFF benchmarks
+# Test Parameter/config file for BFF benchmarks
 # - "datasets" defines canonical dataset sizes and generation params
 # - "parameter_sets" defines workspaces that reference datasets by name
 #
-# Recommended location: config/parameter_sets.yaml (keeps CI/workflow files separate)
+# This is the reference config file for all test runs. 
+#
+# Recommended location: config/test_parameter_sets.yaml (keeps CI/workflow files separate)
 #
 # Important: change_fraction, new_fraction, delete_fraction are FRACTIONS (e.g. 0.01 = 1%), not percentages.
 
