@@ -2,7 +2,10 @@
 # - "datasets" defines canonical dataset sizes and generation params
 # - "parameter_sets" defines workspaces that reference datasets by name
 #
-# Recommended location: config/parameter_sets.yaml (keeps CI/workflow files separate)
+# This contains a list of possible test runs, but is not referenced in the work flow. 
+# Move selected parameter_sets into test_parameter_sets.yml for them to be included in the work flow.
+#
+# Recommended location: config/all_parameter_sets.yaml (keeps CI/workflow files separate)
 #
 # Important: change_fraction, new_fraction, delete_fraction are FRACTIONS (e.g. 0.01 = 1%), not percentages.
 
