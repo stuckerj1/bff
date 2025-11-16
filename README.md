@@ -180,7 +180,7 @@ The workflow is designed so you can easily add new source locations such as CSV 
 
 ### Ingestion Targets
 
-After simulating external data, the framework supports ingestion into three target types:
+After simulating external data, the framework supports ingestion into two target types:
 
 | Target Type           | Description                                   | 
 |-----------------------|-----------------------------------------------|
@@ -235,29 +235,11 @@ The ingestion module is structured for easy swapping of external sources. To add
 - **Purpose:** Compile results, track workspace utilization, storage/compute footprint, refresh rates, and estimated cost per test case.
 - **Tools:** Fabric Metrics App, notebook logging, Power BI dashboards, comparative tables.
 
-## 📊 Sample Scorecard Layout
+## 📊 Test Case Definitions:  Parameter Sets
 
-Note: this table needs updated.  The TC.* naming convention is no longer used.  
-Instead, use the parameter_sets names, e.g., BFF-10k-LH-to-Delta-Full-Refresh
+Multiple test scenarios can be run in sequence, each with its own parameter_set.  A list of the parameter set for each scenario is stored in `config\test_parameter_sets.yml`.  This config file is referenced in all processes.
 
-| Test Case |  Action | Target | Rows | Update Strategy | Ingest Time | Storage Size | Query Type | Query Time | Notes | 
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | 
-| TC.01.x | Load   | delta_refresh_load<br>delta_compare_load<br>delta_increment_load | per x | - | 3.2s | 12 MB | - | - | Initial load; benchmark only one | 
-| TC.02.x | Load   | wh_table_refresh_load<br>wh_table_compare_load<br>wh_table_increment_load | per x | - | 3.2s | 12 MB | - | - | Initial load; benchmark only one | 
-| TC.03.x | Update | delta_refresh_load     | per x | Full Refresh | 3.2s | 12 MB | - | - | Overwrite Target | 
-| TC.04.x | Update | wh_table_refresh_load | per x | Full Refresh | 3.2s | 12 MB | - | - | Overwrite Target | 
-| TC.05.x | Update | delta_compare_load     | per x | Full Compare | 3.2s | 12 MB | - | - | Compare and Append | 
-| TC.06.x | Update | wh_table_compare_load | per x | Full Compare | 3.2s | 12 MB | - | - | Compare and Append | 
-| TC.07.x | Update | delta_increment_load     | per x | Incremental | 3.2s | 12 MB | - | - | Append inserts/updates/deletes | 
-| TC.08.x | Update | wh_table_increment_load | per x | Incremental | 3.2s | 12 MB | - | - | Append inserts/updates/deletes | 
-| TC.09.x<br>(deferred) | Update | delta_cdc_load     | per x | CDC | 3.2s | 12 MB | - | - | Append inserts/updates/deletes with possible multiple updates per record | 
-| TC.10.x<br>(deferred) | Update | wh_table_cdc_load | per x | CDC | 3.2s | 12 MB | - | - | Append inserts/updates/deletes with possible multiple updates per record | 
-| TC.11.x | Query    | delta_increment_load                | per x | - | - | - | Aggregate | 1.2s | Notebook, measure performance | 
-| TC.12.x | Query    | WH shortcut to delta_increment_load | per x | - | - | - | Aggregate | 1.2s | Power BI or Notebook, measure performance | 
-| TC.13.x | Query    | wh_table_increment_load             | per x | - | - | - | Aggregate | 1.2s | Power BI or Notebook, measure performance | 
-| TC.14.x | Storage Check | delta_refresh_load<br>delta_compare_load<br>delta_increment_load     | - | - | - | 12 MB | - | - | Size & cost of storage | 
-| TC.15.x | Storage Check | wh_table_refresh_load<br>wh_table_compare_load<br>wh_table_increment_load | - | - | - | 12 MB | - | - | Size & cost of storage | 
-| TC.16.x | Metrics | All | - | - | - | - | - | - | Notebook or Power BI | 
+For comparative selection, a more comprehensive list of possible parameter_sets is stored in `config\all_parameter_sets.yml`.  Any of the parameter_sets in `all_parameter_sets.yml` can be added to `test_parameter_sets.yml`.
 
 ---
 
